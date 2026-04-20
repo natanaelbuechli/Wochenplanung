@@ -1,18 +1,19 @@
 :root {
-  --bg: #f5f1e8;
-  --panel: #fffaf2;
+  --bg: #edf4ef;
+  --panel: #fffdf8;
   --panel-strong: #ffffff;
-  --border: #dfd4bf;
-  --text: #2d241c;
-  --muted: #776759;
-  --accent: #c96f4a;
-  --accent-soft: #f3d6c9;
-  --monday: #fff2b4;
-  --tuesday: #ffd39f;
-  --wednesday: #ffc1bf;
-  --thursday: #e0d0fb;
-  --friday: #cfe5ff;
-  --success: #4f8a5b;
+  --border: #d9d8cf;
+  --text: #2a332d;
+  --muted: #708178;
+  --accent: #6ea99b;
+  --accent-soft: #ddeee8;
+  --monday: #f7f2d9;
+  --tuesday: #f7eadc;
+  --wednesday: #f6e4e2;
+  --thursday: #ece7f5;
+  --friday: #e5eef8;
+  --success: #5e9074;
+  --shadow: rgba(89, 114, 100, 0.12);
 }
 
 * {
@@ -24,8 +25,9 @@ body {
   margin: 0;
   min-height: 100%;
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 28%),
-    linear-gradient(135deg, #f8f3eb 0%, #efe7da 100%);
+    linear-gradient(148deg, rgba(159, 194, 182, 0.34) 0%, rgba(159, 194, 182, 0.34) 22%, transparent 22%, transparent 74%, rgba(159, 194, 182, 0.24) 74%, rgba(159, 194, 182, 0.24) 100%),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), transparent 24%),
+    linear-gradient(135deg, #edf5ef 0%, #e6efe9 100%);
   color: var(--text);
 }
 
@@ -49,15 +51,21 @@ button {
   padding: 24px;
 }
 
+.planner-title {
+  color: #5d9d90;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
 .auth-card,
 .loading-card {
   width: min(480px, 100%);
   margin: 8vh auto;
-  background: rgba(255, 250, 242, 0.96);
-  border: 1px solid rgba(223, 212, 191, 0.9);
+  background: rgba(255, 253, 248, 0.97);
+  border: 1px solid rgba(217, 216, 207, 0.95);
   border-radius: 24px;
   padding: 28px;
-  box-shadow: 0 18px 50px rgba(73, 52, 36, 0.08);
+  box-shadow: 0 18px 50px var(--shadow);
 }
 
 .auth-card h1,
@@ -102,7 +110,23 @@ button {
   background: var(--accent);
   color: white;
   font-weight: 700;
-  box-shadow: 0 10px 18px rgba(201, 111, 74, 0.25);
+  box-shadow: 0 10px 18px rgba(110, 169, 155, 0.28);
+}
+
+.todo-create button {
+  border: 0;
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: rgba(110, 169, 155, 0.14);
+  color: #4f8075;
+  font-weight: 700;
+  box-shadow: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.todo-create button:hover {
+  background: rgba(110, 169, 155, 0.22);
+  color: #416b62;
 }
 
 .auth-form button:disabled,
@@ -120,11 +144,11 @@ button {
 }
 
 .panel {
-  background: rgba(255, 250, 242, 0.92);
-  border: 1px solid rgba(223, 212, 191, 0.94);
+  background: rgba(255, 253, 248, 0.95);
+  border: 1px solid rgba(217, 216, 207, 0.95);
   border-radius: 24px;
   padding: 18px;
-  box-shadow: 0 18px 36px rgba(84, 61, 46, 0.08);
+  box-shadow: 0 18px 36px var(--shadow);
 }
 
 .app-header {
@@ -144,7 +168,7 @@ button {
 .header-actions button.secondary,
 .week-create.secondary {
   background: var(--accent-soft);
-  color: #7c3f27;
+  color: #4b7b70;
   box-shadow: none;
 }
 
@@ -166,7 +190,7 @@ button {
 .todo-item {
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.82);
   padding: 12px;
 }
 
@@ -186,6 +210,80 @@ button {
   margin-bottom: 4px;
 }
 
+.week-card-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.week-select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  color: var(--text);
+}
+
+.week-summary {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px;
+}
+
+.planning-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(110, 169, 155, 0.08), transparent 22%),
+    radial-gradient(circle at bottom left, rgba(110, 169, 155, 0.08), transparent 20%),
+    rgba(255, 253, 248, 0.97);
+}
+
+.planning-panel::before,
+.planning-panel::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.32;
+}
+
+.planning-panel::before {
+  inset: 16px auto auto 14px;
+  width: 110px;
+  height: 220px;
+  background:
+    linear-gradient(120deg, transparent 44%, rgba(214, 196, 183, 0.85) 45%, transparent 46%) 0 8px / 100% 42px repeat-y,
+    radial-gradient(ellipse at left center, transparent 56%, rgba(214, 196, 183, 0.7) 57%, transparent 59%) 14px 0 / 100% 42px repeat-y;
+}
+
+.planning-panel::after {
+  right: 18px;
+  bottom: 14px;
+  width: 120px;
+  height: 240px;
+  background:
+    linear-gradient(60deg, transparent 48%, rgba(110, 169, 155, 0.8) 49%, transparent 50%) 0 12px / 100% 40px repeat-y,
+    radial-gradient(ellipse at right center, transparent 54%, rgba(110, 169, 155, 0.72) 55%, transparent 58%) -18px 0 / 100% 40px repeat-y;
+  opacity: 0.26;
+}
+
+.restore-week-button {
+  border: 0;
+  background: transparent;
+  color: #7c3f27;
+  padding: 6px 0 0;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: left;
+}
+
 .planner-grid {
   overflow: hidden;
 }
@@ -193,13 +291,20 @@ button {
 .planning-table {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
 }
 
 .day-column {
-  border-radius: 20px;
-  padding: 10px;
-  border: 1px solid rgba(125, 107, 88, 0.08);
+  border-radius: 18px;
+  padding: 8px;
+  border: 1px solid rgba(128, 133, 126, 0.22);
+  background-clip: padding-box;
+  min-height: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .day-column[data-day="Montag"] {
@@ -224,7 +329,10 @@ button {
 
 .day-header {
   margin-bottom: 8px;
-  font-size: 0.95rem;
+  font-size: clamp(0.66rem, 0.95vw, 0.82rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(112, 129, 120, 0.95);
 }
 
 .day-cell {
@@ -234,16 +342,20 @@ button {
 }
 
 .slot-label {
-  font-size: 0.84rem;
+  font-size: clamp(0.62rem, 0.85vw, 0.76rem);
   font-weight: 700;
-  color: rgba(45, 36, 28, 0.8);
+  color: rgba(89, 111, 100, 0.84);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .day-cell textarea {
-  min-height: 96px;
+  min-height: clamp(68px, 10vw, 96px);
   resize: vertical;
   line-height: 1.45;
-  padding: 10px 11px;
+  padding: 8px 9px;
+  background: rgba(255, 255, 255, 0.68);
+  font-size: clamp(0.72rem, 0.95vw, 0.95rem);
 }
 
 .day-cell:last-child {
@@ -303,8 +415,8 @@ button {
 }
 
 .assign-chip {
-  border: 1px solid rgba(125, 107, 88, 0.18);
-  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(112, 129, 120, 0.16);
+  background: rgba(255, 255, 255, 0.78);
   color: var(--muted);
   border-radius: 999px;
   padding: 4px 8px;
@@ -324,7 +436,7 @@ button {
   gap: 8px;
   border-radius: 999px;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.84);
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -358,7 +470,7 @@ button {
   border: 0;
   background: transparent;
   padding: 0;
-  color: #7c3f27;
+  color: #4b7b70;
   font-weight: 700;
   text-align: left;
 }
@@ -379,6 +491,32 @@ button {
   }
 
   .planning-table {
-    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .day-column {
+    padding: 6px;
+    border-radius: 14px;
+  }
+
+  .day-header {
+    margin-bottom: 6px;
+    letter-spacing: 0.08em;
+  }
+
+  .slot-label {
+    letter-spacing: 0.04em;
+  }
+
+  .day-cell {
+    gap: 3px;
+    margin-bottom: 6px;
+  }
+
+  .day-cell textarea {
+    min-height: 58px;
+    padding: 7px;
+    line-height: 1.3;
   }
 }

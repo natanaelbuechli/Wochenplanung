@@ -4,8 +4,12 @@ create table if not exists public.weeks (
   id uuid primary key default gen_random_uuid(),
   kw integer not null,
   start_date date not null unique,
+  archived boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.weeks
+add column if not exists archived boolean not null default false;
 
 create table if not exists public.entries (
   id uuid primary key default gen_random_uuid(),

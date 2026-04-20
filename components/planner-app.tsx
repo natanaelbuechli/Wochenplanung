@@ -124,6 +124,7 @@ export function PlannerApp() {
   const [todoDraft, setTodoDraft] = useState("");
   const [showOtherTodos, setShowOtherTodos] = useState(false);
   const [showCompletedTodos, setShowCompletedTodos] = useState(false);
+  const [showArchivedWeeks, setShowArchivedWeeks] = useState(false);
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const saveTimers = useRef<Record<string, number>>({});
@@ -139,6 +140,10 @@ export function PlannerApp() {
     const currentWeekStart = getCurrentWeekStartDate();
 
     return [...weeks].sort((a, b) => {
+      if (a.archived !== b.archived) {
+        return a.archived ? 1 : -1;
+      }
+
       const aIsCurrent = a.start_date === currentWeekStart;
       const bIsCurrent = b.start_date === currentWeekStart;
 
@@ -153,6 +158,12 @@ export function PlannerApp() {
       return a.start_date.localeCompare(b.start_date);
     });
   }, [weeks]);
+
+  const activeWeeks = useMemo(() => sortedWeeks.filter((week) => !week.archived), [sortedWeeks]);
+  const archivedWeeks = useMemo(
+    () => sortedWeeks.filter((week) => week.archived).sort((a, b) => b.start_date.localeCompare(a.start_date)),
+    [sortedWeeks]
+  );
 
   const assignableUsers = useMemo(() => {
     const profileNames = profiles
@@ -226,7 +237,11 @@ export function PlannerApp() {
       setWeeks(weeksResult.data ?? []);
 
       if (!selectedWeekIdRef.current) {
-        setSelectedWeekId(weeksResult.data?.[0]?.id ?? null);
+        const initialWeek =
+          weeksResult.data?.find((week) => !week.archived) ??
+          weeksResult.data?.[0] ??
+          null;
+        setSelectedWeekId(initialWeek?.id ?? null);
       }
     }
 
@@ -480,7 +495,10 @@ export function PlannerApp() {
     const nextWeek = getNextWeekData(weeks);
     const { data, error: weekError } = await supabase
       .from("weeks")
-      .insert(nextWeek)
+      .insert({
+        ...nextWeek,
+        archived: false
+      })
       .select()
       .single();
 
@@ -490,7 +508,65 @@ export function PlannerApp() {
     }
 
     if (data) {
+      setWeeks((current) => [data, ...current.filter((week) => week.id !== data.id)]);
       setSelectedWeekId(data.id);
+    }
+  }
+
+  async function archiveWeek() {
+    if (!activeWeek || activeWeek.archived) {
+      return;
+    }
+
+    const nextSelectedWeek =
+      activeWeeks.find((week) => week.id !== activeWeek.id)?.id ??
+      archivedWeeks[0]?.id ??
+      null;
+
+    setWeeks((current) =>
+      current.map((week) =>
+        week.id === activeWeek.id
+          ? {
+              ...week,
+              archived: true
+            }
+          : week
+      )
+    );
+    setSelectedWeekId(nextSelectedWeek);
+
+    const { error: archiveError } = await supabase
+      .from("weeks")
+      .update({ archived: true })
+      .eq("id", activeWeek.id);
+
+    if (archiveError) {
+      setError(archiveError.message);
+      bootstrap().catch((bootstrapError: Error) => setError(bootstrapError.message));
+    }
+  }
+
+  async function restoreWeek(weekId: string) {
+    setWeeks((current) =>
+      current.map((week) =>
+        week.id === weekId
+          ? {
+              ...week,
+              archived: false
+            }
+          : week
+      )
+    );
+    setSelectedWeekId(weekId);
+
+    const { error: restoreError } = await supabase
+      .from("weeks")
+      .update({ archived: false })
+      .eq("id", weekId);
+
+    if (restoreError) {
+      setError(restoreError.message);
+      bootstrap().catch((bootstrapError: Error) => setError(bootstrapError.message));
     }
   }
 
@@ -500,24 +576,48 @@ export function PlannerApp() {
       return;
     }
 
-    const { error: todoError } = await supabase.from("todos").insert({
-      text: todoDraft.trim(),
-      completed: false,
-      assigned_to: getDisplayName(session?.user ?? null)
-    });
+    const { data, error: todoError } = await supabase
+      .from("todos")
+      .insert({
+        text: todoDraft.trim(),
+        completed: false,
+        assigned_to: getDisplayName(session?.user ?? null)
+      })
+      .select()
+      .single();
 
     if (todoError) {
       setError(todoError.message);
       return;
     }
 
+    if (data) {
+      setTodos((current) => [data, ...current.filter((todo) => todo.id !== data.id)]);
+      setTodoDrafts((current) => ({
+        ...current,
+        [data.id]: data.text
+      }));
+    }
+
     setTodoDraft("");
   }
 
   async function updateTodo(todoId: string, patch: Partial<Todo>) {
+    setTodos((current) =>
+      current.map((todo) =>
+        todo.id === todoId
+          ? {
+              ...todo,
+              ...patch
+            }
+          : todo
+      )
+    );
+
     const { error: todoError } = await supabase.from("todos").update(patch).eq("id", todoId);
     if (todoError) {
       setError(todoError.message);
+      bootstrap().catch((bootstrapError: Error) => setError(bootstrapError.message));
     }
   }
 
@@ -596,7 +696,7 @@ export function PlannerApp() {
     <main className="planner-shell">
       <header className="app-header">
         <div>
-          <h1>Kindergarten Wochenplanung</h1>
+          <h1 className="planner-title">Kindergarten Wochenplanung</h1>
           <p className="muted">
             Eingeloggt als <strong>{getDisplayName(session.user)}</strong>. Alle Aenderungen werden
             live synchronisiert.
@@ -627,22 +727,75 @@ export function PlannerApp() {
                 werden.
               </div>
             ) : (
-              sortedWeeks.map((week) => (
-                <button
-                  key={week.id}
-                  className={`week-card ${selectedWeekId === week.id ? "active" : ""}`}
-                  onClick={() => setSelectedWeekId(week.id)}
-                  type="button"
+              <>
+                <select
+                  className="week-select"
+                  onChange={(event) => setSelectedWeekId(event.target.value || null)}
+                  value={selectedWeekId ?? ""}
                 >
-                  <strong>KW {week.kw}</strong>
-                  <span className="week-meta">Start: {formatDate(week.start_date)}</span>
-                </button>
-              ))
+                  <option value="">Woche waehlen</option>
+                  {activeWeeks.map((week) => (
+                    <option key={week.id} value={week.id}>
+                      {`KW ${week.kw} - ${formatDate(week.start_date)}`}
+                    </option>
+                  ))}
+                </select>
+                {activeWeek ? (
+                  <div className="week-summary">
+                    <strong>{`KW ${activeWeek.kw}`}</strong>
+                    <span className="week-meta">Start: {formatDate(activeWeek.start_date)}</span>
+                  </div>
+                ) : null}
+                {activeWeek && !activeWeek.archived ? (
+                  <button className="text-toggle" onClick={archiveWeek} type="button">
+                    Woche ins Archiv verschieben
+                  </button>
+                ) : null}
+                {archivedWeeks.length > 0 ? (
+                  <div className="todo-toggle-block">
+                    <button
+                      className="text-toggle"
+                      onClick={() => setShowArchivedWeeks((current) => !current)}
+                      type="button"
+                    >
+                      {showArchivedWeeks
+                        ? `Archiv ausblenden (${archivedWeeks.length})`
+                        : `Archiv anzeigen (${archivedWeeks.length})`}
+                    </button>
+                    {showArchivedWeeks ? (
+                      <div className="weeks-list nested">
+                        {archivedWeeks.map((week) => (
+                          <div
+                            key={week.id}
+                            className={`week-card ${selectedWeekId === week.id ? "active" : ""}`}
+                          >
+                            <button
+                              className="week-card-button"
+                              onClick={() => setSelectedWeekId(week.id)}
+                              type="button"
+                            >
+                              <strong>{`KW ${week.kw}`}</strong>
+                              <span className="week-meta">Start: {formatDate(week.start_date)}</span>
+                            </button>
+                            <button
+                              className="restore-week-button"
+                              onClick={() => restoreWeek(week.id)}
+                              type="button"
+                            >
+                              Wiederherstellen
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </aside>
 
-        <section className="panel">
+        <section className="panel planning-panel">
           <div className="section-title">
             <div>
               <h2>{activeWeek ? `Planung fuer KW ${activeWeek.kw}` : "Planung"}</h2>

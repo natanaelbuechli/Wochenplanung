@@ -45,6 +45,7 @@ Wenn GitHub mehrere Dateien/Folder gleichzeitig annimmt, kannst du diese Reihenf
 - [ ] `lib/supabase/browser.ts`
 - [ ] `lib/supabase/server.ts`
 - [ ] `supabase/schema.sql`
+- [ ] `supabase/add_archived_to_weeks.sql`
 
 ## Danach auf GitHub
 

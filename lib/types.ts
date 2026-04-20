@@ -15,6 +15,7 @@ export type Week = {
   id: string;
   kw: number;
   start_date: string;
+  archived: boolean;
 };
 
 export type Entry = {
