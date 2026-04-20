@@ -335,6 +335,11 @@ button {
   color: rgba(112, 129, 120, 0.95);
 }
 
+.day-label-short,
+.slot-label-short {
+  display: none;
+}
+
 .day-cell {
   display: grid;
   gap: 4px;
@@ -518,5 +523,50 @@ button {
     min-height: 58px;
     padding: 7px;
     line-height: 1.3;
+  }
+}
+
+@media (max-width: 720px) {
+  .planning-table {
+    gap: 4px;
+  }
+
+  .day-column {
+    padding: 5px;
+    border-radius: 12px;
+  }
+
+  .day-header {
+    margin-bottom: 5px;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+  }
+
+  .day-label-full,
+  .slot-label-full {
+    display: none;
+  }
+
+  .day-label-short,
+  .slot-label-short {
+    display: inline;
+  }
+
+  .slot-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.03em;
+  }
+
+  .day-cell {
+    gap: 3px;
+    margin-bottom: 5px;
+  }
+
+  .day-cell textarea {
+    min-height: 64px;
+    padding: 6px;
+    border-radius: 12px;
+    font-size: 0.74rem;
+    line-height: 1.22;
   }
 }

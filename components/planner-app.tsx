@@ -19,6 +19,22 @@ function isSlotAvailable(day: Day, time: TimeSlot) {
   return !(time === "Nachmittag" && disabledAfternoons.includes(day));
 }
 
+function getShortDayLabel(day: Day) {
+  const labels: Record<Day, string> = {
+    Montag: "Mo",
+    Dienstag: "Di",
+    Mittwoch: "Mi",
+    Donnerstag: "Do",
+    Freitag: "Fr"
+  };
+
+  return labels[day];
+}
+
+function getShortTimeLabel(time: TimeSlot) {
+  return time === "Morgen" ? "AM" : "PM";
+}
+
 function getNextAssignee(options: string[], currentValue: string | null) {
   const values = ["", ...options];
   const currentIndex = values.findIndex((value) => value === (currentValue ?? ""));
@@ -813,7 +829,10 @@ export function PlannerApp() {
                 {DAYS.map((day) => (
                   <article className="day-column" data-day={day} key={day}>
                     <div className="day-header">
-                      <strong>{day}</strong>
+                      <strong>
+                        <span className="day-label-full">{day}</span>
+                        <span className="day-label-short">{getShortDayLabel(day)}</span>
+                      </strong>
                     </div>
                     {TIMES.map((time) => {
                       if (!isSlotAvailable(day, time)) {
@@ -824,7 +843,10 @@ export function PlannerApp() {
 
                       return (
                         <label className="day-cell" key={key}>
-                          <span className="slot-label">{time}</span>
+                          <span className="slot-label">
+                            <span className="slot-label-full">{time}</span>
+                            <span className="slot-label-short">{getShortTimeLabel(time)}</span>
+                          </span>
                           <textarea
                             placeholder="Eintragen..."
                             value={entryDrafts[key] ?? ""}
