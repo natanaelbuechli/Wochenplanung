@@ -166,6 +166,8 @@ export function PlannerApp() {
   const todoSaveTimers = useRef<Record<string, number>>({});
   const selectedWeekIdRef = useRef<string | null>(null);
   const swipeStartXRef = useRef<number | null>(null);
+  const swipeStartYRef = useRef<number | null>(null);
+  const swipeLockedRef = useRef<"horizontal" | "vertical" | null>(null);
 
   const activeWeek = useMemo(
     () => weeks.find((week) => week.id === selectedWeekId) ?? null,
@@ -710,19 +712,59 @@ export function PlannerApp() {
   }
 
   function handlePlannerTouchStart(event: TouchEvent<HTMLElement>) {
-    swipeStartXRef.current = event.changedTouches[0]?.clientX ?? null;
+    const touch = event.changedTouches[0];
+    swipeStartXRef.current = touch?.clientX ?? null;
+    swipeStartYRef.current = touch?.clientY ?? null;
+    swipeLockedRef.current = null;
   }
 
-  function handlePlannerTouchEnd(event: TouchEvent<HTMLElement>) {
-    if (swipeStartXRef.current === null) {
+  function handlePlannerTouchMove(event: TouchEvent<HTMLElement>) {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) {
       return;
     }
 
-    const endX = event.changedTouches[0]?.clientX ?? swipeStartXRef.current;
-    const deltaX = endX - swipeStartXRef.current;
-    swipeStartXRef.current = null;
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
 
-    if (Math.abs(deltaX) < 50) {
+    const deltaX = touch.clientX - swipeStartXRef.current;
+    const deltaY = touch.clientY - swipeStartYRef.current;
+
+    if (!swipeLockedRef.current) {
+      if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) {
+        return;
+      }
+
+      swipeLockedRef.current =
+        Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+    }
+
+    if (swipeLockedRef.current === "horizontal") {
+      event.preventDefault();
+    }
+  }
+
+  function handlePlannerTouchEnd(event: TouchEvent<HTMLElement>) {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    const endX = touch?.clientX ?? swipeStartXRef.current;
+    const endY = touch?.clientY ?? swipeStartYRef.current;
+    const deltaX = endX - swipeStartXRef.current;
+    const deltaY = endY - swipeStartYRef.current;
+    swipeStartXRef.current = null;
+    swipeStartYRef.current = null;
+    const swipeMode = swipeLockedRef.current;
+    swipeLockedRef.current = null;
+
+    if (swipeMode !== "horizontal") {
+      return;
+    }
+
+    if (Math.abs(deltaX) < 50 || Math.abs(deltaX) <= Math.abs(deltaY)) {
       return;
     }
 
@@ -876,6 +918,7 @@ export function PlannerApp() {
         <section
           className="panel planning-panel"
           onTouchEnd={handlePlannerTouchEnd}
+          onTouchMove={handlePlannerTouchMove}
           onTouchStart={handlePlannerTouchStart}
         >
           <div className="section-title">
