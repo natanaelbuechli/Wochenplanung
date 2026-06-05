@@ -180,6 +180,30 @@ button {
   margin-bottom: 10px;
 }
 
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.week-nav-button {
+  border: 1px solid rgba(112, 129, 120, 0.18);
+  background: rgba(255, 255, 255, 0.82);
+  color: #5d9d90;
+  border-radius: 999px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.week-nav-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .weeks-list,
 .todos-list {
   display: grid;
@@ -328,6 +352,9 @@ button {
 }
 
 .day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   margin-bottom: 8px;
   font-size: clamp(0.66rem, 0.95vw, 0.82rem);
   letter-spacing: 0.14em;
@@ -335,23 +362,17 @@ button {
   color: rgba(112, 129, 120, 0.95);
 }
 
-.day-label-short,
-.slot-label-short {
-  display: none;
+.day-date {
+  font-size: clamp(0.58rem, 0.8vw, 0.72rem);
+  letter-spacing: 0.04em;
+  color: rgba(112, 129, 120, 0.72);
+  white-space: nowrap;
 }
 
 .day-cell {
   display: grid;
   gap: 4px;
   margin-bottom: 8px;
-}
-
-.slot-label {
-  font-size: clamp(0.62rem, 0.85vw, 0.76rem);
-  font-weight: 700;
-  color: rgba(89, 111, 100, 0.84);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 .day-cell textarea {
@@ -527,6 +548,20 @@ button {
 }
 
 @media (max-width: 720px) {
+  .section-title {
+    align-items: flex-start;
+  }
+
+  .week-nav {
+    gap: 4px;
+  }
+
+  .week-nav-button {
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+  }
+
   .planning-table {
     gap: 4px;
   }
@@ -540,21 +575,14 @@ button {
     margin-bottom: 5px;
     font-size: 0.62rem;
     letter-spacing: 0.04em;
+    align-items: flex-start;
+    gap: 2px;
+    flex-direction: column;
   }
 
-  .day-label-full,
-  .slot-label-full {
-    display: none;
-  }
-
-  .day-label-short,
-  .slot-label-short {
-    display: inline;
-  }
-
-  .slot-label {
-    font-size: 0.6rem;
-    letter-spacing: 0.03em;
+  .day-date {
+    font-size: 0.56rem;
+    line-height: 1;
   }
 
   .day-cell {
