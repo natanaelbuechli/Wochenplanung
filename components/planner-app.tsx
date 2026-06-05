@@ -868,13 +868,6 @@ export function PlannerApp() {
   }
 
   function handlePlannerTouchStart(event: TouchEvent<HTMLElement>) {
-    if (event.target instanceof HTMLTextAreaElement) {
-      swipeStartXRef.current = null;
-      swipeStartYRef.current = null;
-      swipeLockedRef.current = null;
-      return;
-    }
-
     const touch = event.changedTouches[0];
     swipeStartXRef.current = touch?.clientX ?? null;
     swipeStartYRef.current = touch?.clientY ?? null;
