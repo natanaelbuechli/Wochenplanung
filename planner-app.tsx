@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel, Session, User } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { DAYS, TIMES, type Day, type Entry, type Profile, type TimeSlot, type Todo, type Week } from "@/lib/types";
@@ -33,6 +33,25 @@ function getShortDayLabel(day: Day) {
 
 function getShortTimeLabel(time: TimeSlot) {
   return time === "Morgen" ? "AM" : "PM";
+}
+
+function getDayDateLabel(weekStartDate: string, day: Day) {
+  const offsets: Record<Day, number> = {
+    Montag: 0,
+    Dienstag: 1,
+    Mittwoch: 2,
+    Donnerstag: 3,
+    Freitag: 4
+  };
+
+  const [year, month, dayOfMonth] = weekStartDate.split("-").map(Number);
+  const date = new Date(year, month - 1, dayOfMonth);
+  date.setDate(date.getDate() + offsets[day]);
+
+  return new Intl.DateTimeFormat("de-CH", {
+    day: "2-digit",
+    month: "2-digit"
+  }).format(date);
 }
 
 function getNextAssignee(options: string[], currentValue: string | null) {
@@ -146,6 +165,7 @@ export function PlannerApp() {
   const saveTimers = useRef<Record<string, number>>({});
   const todoSaveTimers = useRef<Record<string, number>>({});
   const selectedWeekIdRef = useRef<string | null>(null);
+  const swipeStartXRef = useRef<number | null>(null);
 
   const activeWeek = useMemo(
     () => weeks.find((week) => week.id === selectedWeekId) ?? null,
@@ -179,6 +199,11 @@ export function PlannerApp() {
   const archivedWeeks = useMemo(
     () => sortedWeeks.filter((week) => week.archived).sort((a, b) => b.start_date.localeCompare(a.start_date)),
     [sortedWeeks]
+  );
+
+  const activeWeekIndex = useMemo(
+    () => activeWeeks.findIndex((week) => week.id === selectedWeekId),
+    [activeWeeks, selectedWeekId]
   );
 
   const assignableUsers = useMemo(() => {
@@ -671,6 +696,43 @@ export function PlannerApp() {
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
 
+  function selectRelativeWeek(direction: "prev" | "next") {
+    if (activeWeekIndex === -1) {
+      return;
+    }
+
+    const offset = direction === "next" ? 1 : -1;
+    const targetWeek = activeWeeks[activeWeekIndex + offset];
+
+    if (targetWeek) {
+      setSelectedWeekId(targetWeek.id);
+    }
+  }
+
+  function handlePlannerTouchStart(event: TouchEvent<HTMLElement>) {
+    swipeStartXRef.current = event.changedTouches[0]?.clientX ?? null;
+  }
+
+  function handlePlannerTouchEnd(event: TouchEvent<HTMLElement>) {
+    if (swipeStartXRef.current === null) {
+      return;
+    }
+
+    const endX = event.changedTouches[0]?.clientX ?? swipeStartXRef.current;
+    const deltaX = endX - swipeStartXRef.current;
+    swipeStartXRef.current = null;
+
+    if (Math.abs(deltaX) < 50) {
+      return;
+    }
+
+    if (deltaX < 0) {
+      selectRelativeWeek("next");
+    } else {
+      selectRelativeWeek("prev");
+    }
+  }
+
   if (loading) {
     return (
       <main className="planner-shell">
@@ -811,7 +873,11 @@ export function PlannerApp() {
           </div>
         </aside>
 
-        <section className="panel planning-panel">
+        <section
+          className="panel planning-panel"
+          onTouchEnd={handlePlannerTouchEnd}
+          onTouchStart={handlePlannerTouchStart}
+        >
           <div className="section-title">
             <div>
               <h2>{activeWeek ? `Planung fuer KW ${activeWeek.kw}` : "Planung"}</h2>
@@ -821,6 +887,26 @@ export function PlannerApp() {
                   : "Bitte zuerst eine Woche auswaehlen oder erstellen."}
               </p>
             </div>
+            {activeWeeks.length > 1 ? (
+              <div className="week-nav" aria-label="Wochen wechseln">
+                <button
+                  className="week-nav-button"
+                  disabled={activeWeekIndex <= 0}
+                  onClick={() => selectRelativeWeek("prev")}
+                  type="button"
+                >
+                  ←
+                </button>
+                <button
+                  className="week-nav-button"
+                  disabled={activeWeekIndex === -1 || activeWeekIndex >= activeWeeks.length - 1}
+                  onClick={() => selectRelativeWeek("next")}
+                  type="button"
+                >
+                  →
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {activeWeek ? (
@@ -830,9 +916,11 @@ export function PlannerApp() {
                   <article className="day-column" data-day={day} key={day}>
                     <div className="day-header">
                       <strong>
-                        <span className="day-label-full">{day}</span>
-                        <span className="day-label-short">{getShortDayLabel(day)}</span>
+                        {getShortDayLabel(day)}
                       </strong>
+                      {activeWeek ? (
+                        <span className="day-date">{getDayDateLabel(activeWeek.start_date, day)}</span>
+                      ) : null}
                     </div>
                     {TIMES.map((time) => {
                       if (!isSlotAvailable(day, time)) {
@@ -843,10 +931,6 @@ export function PlannerApp() {
 
                       return (
                         <label className="day-cell" key={key}>
-                          <span className="slot-label">
-                            <span className="slot-label-full">{time}</span>
-                            <span className="slot-label-short">{getShortTimeLabel(time)}</span>
-                          </span>
                           <textarea
                             placeholder="Eintragen..."
                             value={entryDrafts[key] ?? ""}
