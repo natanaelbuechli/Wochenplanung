@@ -1066,12 +1066,6 @@ export function PlannerApp() {
                     </option>
                   ))}
                 </select>
-                {activeWeek ? (
-                  <div className="week-summary">
-                    <strong>{`KW ${activeWeek.kw}`}</strong>
-                    <span className="week-meta">Start: {formatDate(activeWeek.start_date)}</span>
-                  </div>
-                ) : null}
                 {activeWeek && !activeWeek.archived ? (
                   <button className="text-toggle" onClick={archiveWeek} type="button">
                     Woche ins Archiv verschieben

@@ -270,34 +270,6 @@ button {
     rgba(255, 253, 248, 0.97);
 }
 
-.planning-panel::before,
-.planning-panel::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  opacity: 0.32;
-}
-
-.planning-panel::before {
-  inset: 16px auto auto 14px;
-  width: 110px;
-  height: 220px;
-  background:
-    linear-gradient(120deg, transparent 44%, rgba(214, 196, 183, 0.85) 45%, transparent 46%) 0 8px / 100% 42px repeat-y,
-    radial-gradient(ellipse at left center, transparent 56%, rgba(214, 196, 183, 0.7) 57%, transparent 59%) 14px 0 / 100% 42px repeat-y;
-}
-
-.planning-panel::after {
-  right: 18px;
-  bottom: 14px;
-  width: 120px;
-  height: 240px;
-  background:
-    linear-gradient(60deg, transparent 48%, rgba(110, 169, 155, 0.8) 49%, transparent 50%) 0 12px / 100% 40px repeat-y,
-    radial-gradient(ellipse at right center, transparent 54%, rgba(110, 169, 155, 0.72) 55%, transparent 58%) -18px 0 / 100% 40px repeat-y;
-  opacity: 0.26;
-}
-
 .restore-week-button {
   border: 0;
   background: transparent;
