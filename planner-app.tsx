@@ -112,6 +112,20 @@ function getCurrentWeekStartDate() {
   return formatLocalDate(current);
 }
 
+function getCurrentDayLabel(): Day | null {
+  const labels: Record<number, Day | null> = {
+    0: null,
+    1: "Montag",
+    2: "Dienstag",
+    3: "Mittwoch",
+    4: "Donnerstag",
+    5: "Freitag",
+    6: null
+  };
+
+  return labels[new Date().getDay()] ?? null;
+}
+
 function getDisplayName(user: User | null) {
   if (!user?.email) {
     return "Teammitglied";
@@ -162,10 +176,16 @@ export function PlannerApp() {
   const [showArchivedWeeks, setShowArchivedWeeks] = useState(false);
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [entriesByWeek, setEntriesByWeek] = useState<Record<string, Entry[]>>({});
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragAnimating, setIsDragAnimating] = useState(false);
   const saveTimers = useRef<Record<string, number>>({});
   const todoSaveTimers = useRef<Record<string, number>>({});
   const selectedWeekIdRef = useRef<string | null>(null);
   const swipeStartXRef = useRef<number | null>(null);
+  const swipeStartYRef = useRef<number | null>(null);
+  const swipeLockedRef = useRef<"horizontal" | "vertical" | null>(null);
+  const plannerViewportRef = useRef<HTMLDivElement | null>(null);
 
   const activeWeek = useMemo(
     () => weeks.find((week) => week.id === selectedWeekId) ?? null,
@@ -200,11 +220,18 @@ export function PlannerApp() {
     () => sortedWeeks.filter((week) => week.archived).sort((a, b) => b.start_date.localeCompare(a.start_date)),
     [sortedWeeks]
   );
+  const currentWeekStart = useMemo(() => getCurrentWeekStartDate(), []);
+  const currentDayLabel = useMemo(() => getCurrentDayLabel(), []);
 
   const activeWeekIndex = useMemo(
     () => activeWeeks.findIndex((week) => week.id === selectedWeekId),
     [activeWeeks, selectedWeekId]
   );
+  const previousActiveWeek = activeWeekIndex > 0 ? activeWeeks[activeWeekIndex - 1] : null;
+  const nextActiveWeek =
+    activeWeekIndex >= 0 && activeWeekIndex < activeWeeks.length - 1
+      ? activeWeeks[activeWeekIndex + 1]
+      : null;
 
   const assignableUsers = useMemo(() => {
     const profileNames = profiles
@@ -243,6 +270,18 @@ export function PlannerApp() {
 
   const completedTodos = useMemo(() => todos.filter((todo) => todo.completed), [todos]);
 
+  async function archivePastWeeks() {
+    const { error: archiveError } = await supabase
+      .from("weeks")
+      .update({ archived: true })
+      .lt("start_date", currentWeekStart)
+      .eq("archived", false);
+
+    if (archiveError) {
+      setError(archiveError.message);
+    }
+  }
+
   async function bootstrap() {
     setError("");
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -260,11 +299,14 @@ export function PlannerApp() {
       setSelectedWeekId(null);
       setEntries([]);
       setEntryDrafts({});
+      setEntriesByWeek({});
       setTodos([]);
       setTodoDrafts({});
       setProfiles([]);
       return;
     }
+
+    await archivePastWeeks();
 
     const [weeksResult, todosResult, profilesResult] = await Promise.all([
       supabase.from("weeks").select("*").order("start_date", { ascending: false }),
@@ -275,12 +317,17 @@ export function PlannerApp() {
     if (weeksResult.error) {
       setError(weeksResult.error.message);
     } else {
-      setWeeks(weeksResult.data ?? []);
+      const loadedWeeks = weeksResult.data ?? [];
+      setWeeks(loadedWeeks);
 
-      if (!selectedWeekIdRef.current) {
+      const selectedWeek = loadedWeeks.find((week) => week.id === selectedWeekIdRef.current) ?? null;
+      const needsSelectionReset = !selectedWeek || selectedWeek.archived;
+
+      if (needsSelectionReset) {
         const initialWeek =
-          weeksResult.data?.find((week) => !week.archived) ??
-          weeksResult.data?.[0] ??
+          loadedWeeks.find((week) => !week.archived && week.start_date === currentWeekStart) ??
+          loadedWeeks.find((week) => !week.archived) ??
+          loadedWeeks[0] ??
           null;
         setSelectedWeekId(initialWeek?.id ?? null);
       }
@@ -330,7 +377,32 @@ export function PlannerApp() {
     }
 
     setEntries(data ?? []);
+    setEntriesByWeek((current) => ({
+      ...current,
+      [weekId]: data ?? []
+    }));
     setEntryDrafts(buildEntryDrafts(data ?? []));
+  }
+
+  async function loadWeekEntriesIntoCache(weekId: string | null) {
+    if (!weekId) {
+      return;
+    }
+
+    const { data, error: entriesError } = await supabase
+      .from("entries")
+      .select("*")
+      .eq("week_id", weekId);
+
+    if (entriesError) {
+      setError(entriesError.message);
+      return;
+    }
+
+    setEntriesByWeek((current) => ({
+      ...current,
+      [weekId]: data ?? []
+    }));
   }
 
   useEffect(() => {
@@ -427,6 +499,7 @@ export function PlannerApp() {
         setSelectedWeekId(null);
         setEntries([]);
         setEntryDrafts({});
+        setEntriesByWeek({});
         setTodos([]);
         setTodoDrafts({});
         setProfiles([]);
@@ -464,6 +537,20 @@ export function PlannerApp() {
 
     loadEntries(selectedWeekId).catch((entryError: Error) => setError(entryError.message));
   }, [selectedWeekId, session]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    [previousActiveWeek?.id ?? null, nextActiveWeek?.id ?? null].forEach((weekId) => {
+      if (!weekId || entriesByWeek[weekId]) {
+        return;
+      }
+
+      loadWeekEntriesIntoCache(weekId).catch((entryError: Error) => setError(entryError.message));
+    });
+  }, [entriesByWeek, nextActiveWeek?.id, previousActiveWeek?.id, session]);
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -505,6 +592,38 @@ export function PlannerApp() {
       ...current,
       [key]: value
     }));
+    setEntriesByWeek((current) => {
+      const weekEntries = current[activeWeek.id] ?? [];
+      const existingEntry = weekEntries.find((entry) => entry.day === day && entry.time === time);
+
+      if (existingEntry) {
+        return {
+          ...current,
+          [activeWeek.id]: weekEntries.map((entry) =>
+            entry.day === day && entry.time === time
+              ? {
+                  ...entry,
+                  content: value
+                }
+              : entry
+          )
+        };
+      }
+
+      return {
+        ...current,
+        [activeWeek.id]: [
+          ...weekEntries,
+          {
+            id: `draft-${activeWeek.id}-${day}-${time}`,
+            week_id: activeWeek.id,
+            day,
+            time,
+            content: value
+          }
+        ]
+      };
+    });
     setSavingKey(key);
 
     const currentTimer = saveTimers.current[key];
@@ -696,6 +815,63 @@ export function PlannerApp() {
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
 
+  function getWeekDrafts(week: Week | null) {
+    if (!week) {
+      return {};
+    }
+
+    if (week.id === selectedWeekId) {
+      return entryDrafts;
+    }
+
+    return buildEntryDrafts(entriesByWeek[week.id] ?? []);
+  }
+
+  function renderWeekColumns(week: Week | null) {
+    if (!week) {
+      return <div className="planner-placeholder" />;
+    }
+
+    const drafts = getWeekDrafts(week);
+    const isCurrentCalendarWeek = week.start_date === currentWeekStart;
+
+    return (
+      <div className="planning-table">
+        {DAYS.map((day) => (
+          <article
+            className={`day-column ${isCurrentCalendarWeek && currentDayLabel === day ? "current-day" : ""}`}
+            data-day={day}
+            key={`${week.id}-${day}`}
+          >
+            <div className="day-header">
+              <strong>{getShortDayLabel(day)}</strong>
+              <span className="day-date">{getDayDateLabel(week.start_date, day)}</span>
+            </div>
+            {TIMES.map((time) => {
+              if (!isSlotAvailable(day, time)) {
+                return null;
+              }
+
+              const key = getEntryKey(day, time);
+              const isEditable = week.id === selectedWeekId;
+
+              return (
+                <label className="day-cell" key={`${week.id}-${key}`}>
+                  <textarea
+                    placeholder={isEditable ? "Eintragen..." : ""}
+                    readOnly={!isEditable}
+                    value={drafts[key] ?? ""}
+                    onChange={(event) => handleEntryChange(day, time, event.target.value)}
+                  />
+                </label>
+              );
+            })}
+          </article>
+        ))}
+      </div>
+    );
+  }
+
   function selectRelativeWeek(direction: "prev" | "next") {
     if (activeWeekIndex === -1) {
       return;
@@ -710,27 +886,117 @@ export function PlannerApp() {
   }
 
   function handlePlannerTouchStart(event: TouchEvent<HTMLElement>) {
-    swipeStartXRef.current = event.changedTouches[0]?.clientX ?? null;
+    const touch = event.changedTouches[0];
+    swipeStartXRef.current = touch?.clientX ?? null;
+    swipeStartYRef.current = touch?.clientY ?? null;
+    swipeLockedRef.current = null;
+    setIsDragAnimating(false);
   }
 
-  function handlePlannerTouchEnd(event: TouchEvent<HTMLElement>) {
-    if (swipeStartXRef.current === null) {
+  function handlePlannerTouchMove(event: TouchEvent<HTMLElement>) {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) {
       return;
     }
 
-    const endX = event.changedTouches[0]?.clientX ?? swipeStartXRef.current;
-    const deltaX = endX - swipeStartXRef.current;
-    swipeStartXRef.current = null;
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      return;
+    }
 
-    if (Math.abs(deltaX) < 50) {
+    const deltaX = touch.clientX - swipeStartXRef.current;
+    const deltaY = touch.clientY - swipeStartYRef.current;
+
+    if (!swipeLockedRef.current) {
+      if (Math.abs(deltaX) < 12 && Math.abs(deltaY) < 12) {
+        return;
+      }
+
+      swipeLockedRef.current =
+        Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
+    }
+
+    if (swipeLockedRef.current === "horizontal") {
+      setDragOffset(deltaX);
+      event.preventDefault();
+    }
+  }
+
+  function handlePlannerTouchEnd(event: TouchEvent<HTMLElement>) {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) {
+      return;
+    }
+
+    const touch = event.changedTouches[0];
+    const endX = touch?.clientX ?? swipeStartXRef.current;
+    const endY = touch?.clientY ?? swipeStartYRef.current;
+    const deltaX = endX - swipeStartXRef.current;
+    const deltaY = endY - swipeStartYRef.current;
+    swipeStartXRef.current = null;
+    swipeStartYRef.current = null;
+    const swipeMode = swipeLockedRef.current;
+    swipeLockedRef.current = null;
+
+    if (swipeMode !== "horizontal") {
+      setDragOffset(0);
+      return;
+    }
+
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) {
+      setIsDragAnimating(true);
+      setDragOffset(0);
+      window.setTimeout(() => setIsDragAnimating(false), 220);
+      return;
+    }
+
+    const viewportWidth = plannerViewportRef.current?.offsetWidth ?? 0;
+    const threshold = Math.max(50, viewportWidth * 0.18);
+
+    if (Math.abs(deltaX) < threshold) {
+      setIsDragAnimating(true);
+      setDragOffset(0);
+      window.setTimeout(() => setIsDragAnimating(false), 220);
       return;
     }
 
     if (deltaX < 0) {
-      selectRelativeWeek("next");
+      if (!nextActiveWeek || viewportWidth === 0) {
+        setIsDragAnimating(true);
+        setDragOffset(0);
+        window.setTimeout(() => setIsDragAnimating(false), 220);
+        return;
+      }
+
+      setIsDragAnimating(true);
+      setDragOffset(-viewportWidth);
+      window.setTimeout(() => {
+        setSelectedWeekId(nextActiveWeek.id);
+        setDragOffset(0);
+        setIsDragAnimating(false);
+      }, 220);
     } else {
-      selectRelativeWeek("prev");
+      if (!previousActiveWeek || viewportWidth === 0) {
+        setIsDragAnimating(true);
+        setDragOffset(0);
+        window.setTimeout(() => setIsDragAnimating(false), 220);
+        return;
+      }
+
+      setIsDragAnimating(true);
+      setDragOffset(viewportWidth);
+      window.setTimeout(() => {
+        setSelectedWeekId(previousActiveWeek.id);
+        setDragOffset(0);
+        setIsDragAnimating(false);
+      }, 220);
     }
+  }
+
+  function handleWeekArrow(direction: "prev" | "next") {
+    if (isDragAnimating) {
+      return;
+    }
+
+    selectRelativeWeek(direction);
   }
 
   if (loading) {
@@ -818,12 +1084,6 @@ export function PlannerApp() {
                     </option>
                   ))}
                 </select>
-                {activeWeek ? (
-                  <div className="week-summary">
-                    <strong>{`KW ${activeWeek.kw}`}</strong>
-                    <span className="week-meta">Start: {formatDate(activeWeek.start_date)}</span>
-                  </div>
-                ) : null}
                 {activeWeek && !activeWeek.archived ? (
                   <button className="text-toggle" onClick={archiveWeek} type="button">
                     Woche ins Archiv verschieben
@@ -876,6 +1136,7 @@ export function PlannerApp() {
         <section
           className="panel planning-panel"
           onTouchEnd={handlePlannerTouchEnd}
+          onTouchMove={handlePlannerTouchMove}
           onTouchStart={handlePlannerTouchStart}
         >
           <div className="section-title">
@@ -892,7 +1153,7 @@ export function PlannerApp() {
                 <button
                   className="week-nav-button"
                   disabled={activeWeekIndex <= 0}
-                  onClick={() => selectRelativeWeek("prev")}
+                  onClick={() => handleWeekArrow("prev")}
                   type="button"
                 >
                   ←
@@ -900,7 +1161,7 @@ export function PlannerApp() {
                 <button
                   className="week-nav-button"
                   disabled={activeWeekIndex === -1 || activeWeekIndex >= activeWeeks.length - 1}
-                  onClick={() => selectRelativeWeek("next")}
+                  onClick={() => handleWeekArrow("next")}
                   type="button"
                 >
                   →
@@ -910,37 +1171,14 @@ export function PlannerApp() {
           </div>
 
           {activeWeek ? (
-            <div className="planner-grid">
-              <div className="planning-table">
-                {DAYS.map((day) => (
-                  <article className="day-column" data-day={day} key={day}>
-                    <div className="day-header">
-                      <strong>
-                        {getShortDayLabel(day)}
-                      </strong>
-                      {activeWeek ? (
-                        <span className="day-date">{getDayDateLabel(activeWeek.start_date, day)}</span>
-                      ) : null}
-                    </div>
-                    {TIMES.map((time) => {
-                      if (!isSlotAvailable(day, time)) {
-                        return null;
-                      }
-
-                      const key = getEntryKey(day, time);
-
-                      return (
-                        <label className="day-cell" key={key}>
-                          <textarea
-                            placeholder="Eintragen..."
-                            value={entryDrafts[key] ?? ""}
-                            onChange={(event) => handleEntryChange(day, time, event.target.value)}
-                          />
-                        </label>
-                      );
-                    })}
-                  </article>
-                ))}
+            <div className="planner-grid" ref={plannerViewportRef}>
+              <div
+                className={`planning-track ${isDragAnimating ? "animating" : ""}`}
+                style={{ transform: `translateX(calc(-100% + ${dragOffset}px))` }}
+              >
+                <div className="planning-slide">{renderWeekColumns(previousActiveWeek)}</div>
+                <div className="planning-slide">{renderWeekColumns(activeWeek)}</div>
+                <div className="planning-slide">{renderWeekColumns(nextActiveWeek)}</div>
               </div>
             </div>
           ) : (
