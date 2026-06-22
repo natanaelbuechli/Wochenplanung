@@ -270,6 +270,18 @@ export function PlannerApp() {
 
   const completedTodos = useMemo(() => todos.filter((todo) => todo.completed), [todos]);
 
+  async function archivePastWeeks() {
+    const { error: archiveError } = await supabase
+      .from("weeks")
+      .update({ archived: true })
+      .lt("start_date", currentWeekStart)
+      .eq("archived", false);
+
+    if (archiveError) {
+      setError(archiveError.message);
+    }
+  }
+
   async function bootstrap() {
     setError("");
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -294,6 +306,8 @@ export function PlannerApp() {
       return;
     }
 
+    await archivePastWeeks();
+
     const [weeksResult, todosResult, profilesResult] = await Promise.all([
       supabase.from("weeks").select("*").order("start_date", { ascending: false }),
       supabase.from("todos").select("*").order("completed", { ascending: true }).order("id", { ascending: false }),
@@ -303,13 +317,17 @@ export function PlannerApp() {
     if (weeksResult.error) {
       setError(weeksResult.error.message);
     } else {
-      setWeeks(weeksResult.data ?? []);
+      const loadedWeeks = weeksResult.data ?? [];
+      setWeeks(loadedWeeks);
 
-      if (!selectedWeekIdRef.current) {
+      const selectedWeek = loadedWeeks.find((week) => week.id === selectedWeekIdRef.current) ?? null;
+      const needsSelectionReset = !selectedWeek || selectedWeek.archived;
+
+      if (needsSelectionReset) {
         const initialWeek =
-          weeksResult.data?.find((week) => !week.archived && week.start_date === currentWeekStart) ??
-          weeksResult.data?.find((week) => !week.archived) ??
-          weeksResult.data?.[0] ??
+          loadedWeeks.find((week) => !week.archived && week.start_date === currentWeekStart) ??
+          loadedWeeks.find((week) => !week.archived) ??
+          loadedWeeks[0] ??
           null;
         setSelectedWeekId(initialWeek?.id ?? null);
       }
