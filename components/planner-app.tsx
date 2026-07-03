@@ -886,7 +886,7 @@ export function PlannerApp() {
                       onClick={() => openAppointmentEditor(week.id, day)}
                       type="button"
                     >
-                      + Termin einfuegen
+                      +
                     </button>
                   </div>
                 ) : null}

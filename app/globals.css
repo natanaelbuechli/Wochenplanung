@@ -402,9 +402,10 @@ button {
   background: transparent;
   padding: 0;
   color: #5f8f84;
-  font-size: 0.78rem;
+  font-size: 1rem;
   font-weight: 700;
   text-align: left;
+  line-height: 1;
 }
 
 .appointment-save {
@@ -720,6 +721,37 @@ button {
 }
 
 @media (max-width: 720px) {
+  .planner-shell {
+    padding: 10px;
+  }
+
+  .panel {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .planner-layout {
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .planning-slide {
+    padding: 0 2px;
+  }
+
+  .app-header {
+    gap: 10px;
+  }
+
+  .planner-title {
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+  }
+
+  .muted {
+    font-size: 0.9rem;
+  }
+
   .section-title {
     align-items: flex-start;
   }
@@ -735,38 +767,73 @@ button {
   }
 
   .planning-table {
-    gap: 4px;
+    gap: 3px;
   }
 
   .day-column {
-    padding: 5px;
+    padding: 4px;
     border-radius: 12px;
   }
 
   .day-header {
-    margin-bottom: 5px;
-    font-size: 0.62rem;
-    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+    font-size: 0.56rem;
+    letter-spacing: 0.03em;
     align-items: flex-start;
-    gap: 2px;
+    gap: 1px;
     flex-direction: column;
   }
 
   .day-date {
-    font-size: 0.56rem;
+    font-size: 0.5rem;
     line-height: 1;
   }
 
   .day-cell {
-    gap: 3px;
-    margin-bottom: 5px;
+    gap: 2px;
+    margin-bottom: 4px;
   }
 
   .day-cell textarea {
-    min-height: 64px;
-    padding: 6px;
-    border-radius: 12px;
-    font-size: 0.74rem;
-    line-height: 1.22;
+    min-height: 58px;
+    padding: 5px;
+    border-radius: 11px;
+    font-size: 0.64rem;
+    line-height: 1.16;
+  }
+
+  .appointment-insert {
+    margin-top: 5px;
+  }
+
+  .appointment-add {
+    font-size: 0.95rem;
+  }
+
+  .appointment-stack {
+    gap: 4px;
+    margin-top: 5px;
+  }
+
+  .appointment-item {
+    padding: 4px 6px;
+    border-radius: 10px;
+  }
+
+  .appointment-copy {
+    font-size: 0.58rem;
+    gap: 4px;
+  }
+
+  .appointment-time {
+    font-size: 0.58rem;
+  }
+
+  .appointment-remove {
+    font-size: 0.72rem;
+  }
+
+  .appointment-item[data-has-time="true"] .appointment-time {
+    font-size: 0.54rem;
   }
 }
