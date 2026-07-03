@@ -1,14 +1,24 @@
 "use client";
 
 import { FormEvent, TouchEvent, useEffect, useMemo, useRef, useState } from "react";
-import type { RealtimeChannel, Session, User } from "@supabase/supabase-js";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import { DAYS, TIMES, type Day, type Entry, type Profile, type TimeSlot, type Todo, type Week } from "@/lib/types";
+import { DAYS, TIMES, type Appointment, type Day, type Entry, type TimeSlot, type Todo, type Week } from "@/lib/types";
 
 const supabase = createBrowserSupabaseClient();
 
 type EntryDrafts = Record<string, string>;
 type TodoDrafts = Record<string, string>;
+type AppointmentDraft = {
+  title: string;
+  time_label: string;
+};
+type AppointmentDrafts = Record<string, AppointmentDraft>;
+
+const EMPTY_APPOINTMENT_DRAFT: AppointmentDraft = {
+  title: "",
+  time_label: ""
+};
 
 function getEntryKey(day: Day, time: TimeSlot) {
   return `${day}-${time}`;
@@ -88,6 +98,10 @@ function buildTodoDrafts(todos: Todo[]) {
   }, {});
 }
 
+function getAppointmentEditorKey(weekId: string, day: Day) {
+  return `${weekId}-${day}`;
+}
+
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("de-CH", {
     day: "2-digit",
@@ -126,14 +140,6 @@ function getCurrentDayLabel(): Day | null {
   return labels[new Date().getDay()] ?? null;
 }
 
-function getDisplayName(user: User | null) {
-  if (!user?.email) {
-    return "Teammitglied";
-  }
-
-  return user.user_metadata.display_name || user.email.split("@")[0];
-}
-
 function getNextWeekData(weeks: Week[]) {
   const latestWeek = [...weeks].sort((a, b) => a.start_date.localeCompare(b.start_date)).at(-1);
   const baseDate = latestWeek ? new Date(latestWeek.start_date) : new Date();
@@ -159,17 +165,13 @@ function getNextWeekData(weeks: Week[]) {
 }
 
 export function PlannerApp() {
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authEmail, setAuthEmail] = useState("");
-  const [authInfo, setAuthInfo] = useState("");
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [entryDrafts, setEntryDrafts] = useState<EntryDrafts>({});
   const [todos, setTodos] = useState<Todo[]>([]);
   const [todoDrafts, setTodoDrafts] = useState<TodoDrafts>({});
-  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [todoDraft, setTodoDraft] = useState("");
   const [showOtherTodos, setShowOtherTodos] = useState(false);
   const [showCompletedTodos, setShowCompletedTodos] = useState(false);
@@ -177,6 +179,9 @@ export function PlannerApp() {
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [entriesByWeek, setEntriesByWeek] = useState<Record<string, Entry[]>>({});
+  const [appointmentsByWeek, setAppointmentsByWeek] = useState<Record<string, Appointment[]>>({});
+  const [appointmentDrafts, setAppointmentDrafts] = useState<AppointmentDrafts>({});
+  const [openAppointmentEditors, setOpenAppointmentEditors] = useState<Record<string, boolean>>({});
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragAnimating, setIsDragAnimating] = useState(false);
   const saveTimers = useRef<Record<string, number>>({});
@@ -234,39 +239,16 @@ export function PlannerApp() {
       : null;
 
   const assignableUsers = useMemo(() => {
-    const profileNames = profiles
-      .map((profile) => profile.display_name || profile.email.split("@")[0])
-      .filter(Boolean);
     const todoNames = todos.map((todo) => todo.assigned_to).filter(Boolean) as string[];
-    const currentUserName = getDisplayName(session?.user ?? null);
-
-    return Array.from(new Set([...profileNames, ...todoNames, currentUserName])).sort((a, b) =>
-      a.localeCompare(b, "de")
-    );
-  }, [profiles, session?.user, todos]);
-
-  const currentUserName = getDisplayName(session?.user ?? null);
+    return Array.from(new Set(todoNames)).sort((a, b) => a.localeCompare(b, "de"));
+  }, [todos]);
 
   const visibleOpenTodos = useMemo(
-    () =>
-      todos.filter(
-        (todo) =>
-          !todo.completed &&
-          (!todo.assigned_to || todo.assigned_to === currentUserName)
-      ),
-    [currentUserName, todos]
+    () => todos.filter((todo) => !todo.completed),
+    [todos]
   );
 
-  const otherOpenTodos = useMemo(
-    () =>
-      todos.filter(
-        (todo) =>
-          !todo.completed &&
-          todo.assigned_to &&
-          todo.assigned_to !== currentUserName
-      ),
-    [currentUserName, todos]
-  );
+  const otherOpenTodos = useMemo(() => [] as Todo[], []);
 
   const completedTodos = useMemo(() => todos.filter((todo) => todo.completed), [todos]);
 
@@ -288,30 +270,29 @@ export function PlannerApp() {
 
     if (sessionError) {
       setError(sessionError.message);
-    }
-
-    const currentSession = sessionData.session ?? null;
-    setSession(currentSession);
-    setLoading(false);
-
-    if (!currentSession) {
-      setWeeks([]);
-      setSelectedWeekId(null);
-      setEntries([]);
-      setEntryDrafts({});
-      setEntriesByWeek({});
-      setTodos([]);
-      setTodoDrafts({});
-      setProfiles([]);
+      setLoading(false);
       return;
     }
 
+    if (!sessionData.session) {
+      const { error: anonymousAuthError } = await supabase.auth.signInAnonymously();
+
+      if (anonymousAuthError) {
+        setError(
+          "Anonymer Zugriff ist in Supabase noch nicht aktiviert. Bitte Anonymous Sign-Ins einschalten."
+        );
+        setLoading(false);
+        return;
+      }
+    }
+
+    setLoading(false);
+
     await archivePastWeeks();
 
-    const [weeksResult, todosResult, profilesResult] = await Promise.all([
+    const [weeksResult, todosResult] = await Promise.all([
       supabase.from("weeks").select("*").order("start_date", { ascending: false }),
-      supabase.from("todos").select("*").order("completed", { ascending: true }).order("id", { ascending: false }),
-      supabase.from("profiles").select("*").order("display_name", { ascending: true })
+      supabase.from("todos").select("*").order("completed", { ascending: true }).order("id", { ascending: false })
     ]);
 
     if (weeksResult.error) {
@@ -350,13 +331,6 @@ export function PlannerApp() {
         return nextDrafts;
       });
     }
-
-    if (profilesResult.error) {
-      setError(profilesResult.error.message);
-    } else {
-      setProfiles(profilesResult.data ?? []);
-    }
-
   }
 
   async function loadEntries(weekId: string | null) {
@@ -405,105 +379,58 @@ export function PlannerApp() {
     }));
   }
 
+  async function loadAppointments(weekId: string | null) {
+    if (!weekId) {
+      return;
+    }
+
+    const { data, error: appointmentsError } = await supabase
+      .from("appointments")
+      .select("*")
+      .eq("week_id", weekId)
+      .order("created_at", { ascending: true });
+
+    if (appointmentsError) {
+      setError(appointmentsError.message);
+      return;
+    }
+
+    setAppointmentsByWeek((current) => ({
+      ...current,
+      [weekId]: data ?? []
+    }));
+  }
+
+  async function loadWeekAppointmentsIntoCache(weekId: string | null) {
+    if (!weekId) {
+      return;
+    }
+
+    const { data, error: appointmentsError } = await supabase
+      .from("appointments")
+      .select("*")
+      .eq("week_id", weekId)
+      .order("created_at", { ascending: true });
+
+    if (appointmentsError) {
+      setError(appointmentsError.message);
+      return;
+    }
+
+    setAppointmentsByWeek((current) => ({
+      ...current,
+      [weekId]: data ?? []
+    }));
+  }
+
   useEffect(() => {
     selectedWeekIdRef.current = selectedWeekId;
   }, [selectedWeekId]);
 
   useEffect(() => {
-    async function recoverSessionFromUrl() {
-      if (typeof window === "undefined") {
-        return;
-      }
-
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-      const tokenHash = url.searchParams.get("token_hash");
-      const type = url.searchParams.get("type");
-      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-      const accessToken = hashParams.get("access_token");
-      const refreshToken = hashParams.get("refresh_token");
-
-      if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError) {
-          setError(exchangeError.message);
-          return;
-        }
-
-        window.history.replaceState({}, "", "/");
-        await bootstrap();
-        return;
-      }
-
-      if (accessToken && refreshToken) {
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken
-        });
-
-        if (sessionError) {
-          setError(sessionError.message);
-          return;
-        }
-
-        window.history.replaceState({}, "", "/");
-        await bootstrap();
-        return;
-      }
-
-      if (tokenHash && type) {
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: type as
-            | "signup"
-            | "invite"
-            | "magiclink"
-            | "recovery"
-            | "email_change"
-            | "email"
-        });
-
-        if (verifyError) {
-          setError(verifyError.message);
-          return;
-        }
-
-        window.history.replaceState({}, "", "/");
-        await bootstrap();
-      }
-    }
-
-    recoverSessionFromUrl().catch((authError: Error) => {
-      setError(authError.message);
-    });
-
     bootstrap().catch((bootstrapError: Error) => {
       setError(bootstrapError.message);
       setLoading(false);
-    });
-
-    const authSubscription = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      if (nextSession?.user) {
-        const displayName = getDisplayName(nextSession.user);
-        supabase.from("profiles").upsert(
-          {
-            id: nextSession.user.id,
-            email: nextSession.user.email,
-            display_name: displayName
-          },
-          { onConflict: "id" }
-        ).then(() => bootstrap());
-      } else {
-        setWeeks([]);
-        setSelectedWeekId(null);
-        setEntries([]);
-        setEntryDrafts({});
-        setEntriesByWeek({});
-        setTodos([]);
-        setTodoDrafts({});
-        setProfiles([]);
-      }
     });
 
     const realtimeChannel: RealtimeChannel = supabase
@@ -514,16 +441,17 @@ export function PlannerApp() {
       .on("postgres_changes", { event: "*", schema: "public", table: "entries" }, () => {
         loadEntries(selectedWeekIdRef.current).catch((entryError: Error) => setError(entryError.message));
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "todos" }, () => {
-        bootstrap();
+      .on("postgres_changes", { event: "*", schema: "public", table: "appointments" }, () => {
+        loadAppointments(selectedWeekIdRef.current).catch((appointmentsError: Error) =>
+          setError(appointmentsError.message)
+        );
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "todos" }, () => {
         bootstrap();
       })
       .subscribe();
 
     return () => {
-      authSubscription.data.subscription.unsubscribe();
       supabase.removeChannel(realtimeChannel);
       Object.values(saveTimers.current).forEach((timer) => window.clearTimeout(timer));
       Object.values(todoSaveTimers.current).forEach((timer) => window.clearTimeout(timer));
@@ -531,56 +459,29 @@ export function PlannerApp() {
   }, []);
 
   useEffect(() => {
-    if (!session) {
-      return;
-    }
-
-    loadEntries(selectedWeekId).catch((entryError: Error) => setError(entryError.message));
-  }, [selectedWeekId, session]);
+    Promise.all([
+      loadEntries(selectedWeekId),
+      loadAppointments(selectedWeekId)
+    ]).catch((loadError: Error) => setError(loadError.message));
+  }, [selectedWeekId]);
 
   useEffect(() => {
-    if (!session) {
-      return;
-    }
-
     [previousActiveWeek?.id ?? null, nextActiveWeek?.id ?? null].forEach((weekId) => {
-      if (!weekId || entriesByWeek[weekId]) {
+      if (!weekId) {
         return;
       }
 
-      loadWeekEntriesIntoCache(weekId).catch((entryError: Error) => setError(entryError.message));
-    });
-  }, [entriesByWeek, nextActiveWeek?.id, previousActiveWeek?.id, session]);
+      if (!entriesByWeek[weekId]) {
+        loadWeekEntriesIntoCache(weekId).catch((entryError: Error) => setError(entryError.message));
+      }
 
-  async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setAuthInfo("");
-
-    const redirectTo =
-      typeof window === "undefined"
-        ? undefined
-        : `${window.location.origin}/auth/callback?next=/`;
-
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email: authEmail,
-      options: {
-        emailRedirectTo: redirectTo
+      if (!appointmentsByWeek[weekId]) {
+        loadWeekAppointmentsIntoCache(weekId).catch((appointmentsError: Error) =>
+          setError(appointmentsError.message)
+        );
       }
     });
-
-    if (authError) {
-      setError(authError.message);
-      return;
-    }
-
-    setAuthInfo("Magic Link wurde verschickt. Bitte die Mail oeffnen und den Link bestaetigen.");
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut();
-    setSession(null);
-  }
+  }, [appointmentsByWeek, entriesByWeek, nextActiveWeek?.id, previousActiveWeek?.id]);
 
   function handleEntryChange(day: Day, time: TimeSlot, value: string) {
     if (!activeWeek) {
@@ -741,7 +642,7 @@ export function PlannerApp() {
       .insert({
         text: todoDraft.trim(),
         completed: false,
-        assigned_to: getDisplayName(session?.user ?? null)
+        assigned_to: null
       })
       .select()
       .single();
@@ -815,6 +716,101 @@ export function PlannerApp() {
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
 
+  function openAppointmentEditor(weekId: string, day: Day) {
+    const editorKey = getAppointmentEditorKey(weekId, day);
+    setOpenAppointmentEditors((current) => ({
+      ...current,
+      [editorKey]: true
+    }));
+    setAppointmentDrafts((current) => ({
+      ...current,
+      [editorKey]: current[editorKey] ?? { ...EMPTY_APPOINTMENT_DRAFT }
+    }));
+  }
+
+  function closeAppointmentEditor(weekId: string, day: Day) {
+    const editorKey = getAppointmentEditorKey(weekId, day);
+    setOpenAppointmentEditors((current) => ({
+      ...current,
+      [editorKey]: false
+    }));
+    setAppointmentDrafts((current) => ({
+      ...current,
+      [editorKey]: { ...EMPTY_APPOINTMENT_DRAFT }
+    }));
+  }
+
+  function handleAppointmentDraftChange(
+    weekId: string,
+    day: Day,
+    field: keyof AppointmentDraft,
+    value: string
+  ) {
+    const editorKey = getAppointmentEditorKey(weekId, day);
+    setAppointmentDrafts((current) => ({
+      ...current,
+      [editorKey]: {
+        ...(current[editorKey] ?? EMPTY_APPOINTMENT_DRAFT),
+        [field]: value
+      }
+    }));
+  }
+
+  async function createAppointment(event: FormEvent<HTMLFormElement>, week: Week, day: Day) {
+    event.preventDefault();
+
+    const editorKey = getAppointmentEditorKey(week.id, day);
+    const draft = appointmentDrafts[editorKey] ?? EMPTY_APPOINTMENT_DRAFT;
+    const title = draft.title.trim();
+    const timeLabel = draft.time_label.trim();
+
+    if (!title) {
+      return;
+    }
+
+    const { data, error: appointmentError } = await supabase
+      .from("appointments")
+      .insert({
+        week_id: week.id,
+        day,
+        title,
+        time_label: timeLabel || null
+      })
+      .select()
+      .single();
+
+    if (appointmentError) {
+      setError(appointmentError.message);
+      return;
+    }
+
+    if (data) {
+      setAppointmentsByWeek((current) => ({
+        ...current,
+        [week.id]: [...(current[week.id] ?? []), data]
+      }));
+    }
+
+    closeAppointmentEditor(week.id, day);
+  }
+
+  async function deleteAppointment(weekId: string, appointmentId: string) {
+    setAppointmentsByWeek((current) => ({
+      ...current,
+      [weekId]: (current[weekId] ?? []).filter((appointment) => appointment.id !== appointmentId)
+    }));
+
+    const { error: appointmentError } = await supabase
+      .from("appointments")
+      .delete()
+      .eq("id", appointmentId);
+
+    if (appointmentError) {
+      setError(appointmentError.message);
+      loadAppointments(weekId).catch((reloadError: Error) => setError(reloadError.message));
+    }
+  }
+
   function getWeekDrafts(week: Week | null) {
     if (!week) {
       return {};
@@ -827,12 +823,21 @@ export function PlannerApp() {
     return buildEntryDrafts(entriesByWeek[week.id] ?? []);
   }
 
+  function getWeekAppointments(week: Week | null) {
+    if (!week) {
+      return [];
+    }
+
+    return appointmentsByWeek[week.id] ?? [];
+  }
+
   function renderWeekColumns(week: Week | null) {
     if (!week) {
       return <div className="planner-placeholder" />;
     }
 
     const drafts = getWeekDrafts(week);
+    const appointments = getWeekAppointments(week);
     const isCurrentCalendarWeek = week.start_date === currentWeekStart;
 
     return (
@@ -866,6 +871,79 @@ export function PlannerApp() {
                 </label>
               );
             })}
+            {week.id === selectedWeekId ? (
+              <div className="appointment-insert">
+                {openAppointmentEditors[getAppointmentEditorKey(week.id, day)] ? (
+                  <form
+                    className="appointment-form"
+                    onSubmit={(event) => createAppointment(event, week, day)}
+                  >
+                    <input
+                      type="text"
+                      placeholder="Termin"
+                      value={appointmentDrafts[getAppointmentEditorKey(week.id, day)]?.title ?? ""}
+                      onChange={(event) =>
+                        handleAppointmentDraftChange(week.id, day, "title", event.target.value)
+                      }
+                    />
+                    <div className="appointment-form-row">
+                      <input
+                        type="text"
+                        placeholder="Zeit"
+                        value={appointmentDrafts[getAppointmentEditorKey(week.id, day)]?.time_label ?? ""}
+                        onChange={(event) =>
+                          handleAppointmentDraftChange(week.id, day, "time_label", event.target.value)
+                        }
+                      />
+                      <button className="appointment-save" type="submit">
+                        Speichern
+                      </button>
+                    </div>
+                    <button
+                      className="appointment-cancel"
+                      onClick={() => closeAppointmentEditor(week.id, day)}
+                      type="button"
+                    >
+                      Abbrechen
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="appointment-add"
+                    onClick={() => openAppointmentEditor(week.id, day)}
+                    type="button"
+                  >
+                    + Termin einfuegen
+                  </button>
+                )}
+              </div>
+            ) : null}
+            {appointments.filter((appointment) => appointment.day === day).length > 0 ? (
+              <div className="appointment-stack">
+                {appointments
+                  .filter((appointment) => appointment.day === day)
+                  .map((appointment) => (
+                    <div className="appointment-item" key={appointment.id}>
+                      <div className="appointment-copy">
+                        <span className="appointment-icon" aria-hidden="true" />
+                        {appointment.time_label ? (
+                          <span className="appointment-time">{appointment.time_label}</span>
+                        ) : null}
+                        <span className="appointment-title-text">{appointment.title}</span>
+                      </div>
+                      {week.id === selectedWeekId ? (
+                        <button
+                          className="appointment-remove"
+                          onClick={() => deleteAppointment(week.id, appointment.id)}
+                          type="button"
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+              </div>
+            ) : null}
           </article>
         ))}
       </div>
@@ -1004,33 +1082,7 @@ export function PlannerApp() {
       <main className="planner-shell">
         <section className="loading-card">
           <h1>Wochenplanung wird geladen</h1>
-          <p className="muted">Verbindung zu Supabase und Live-Daten wird aufgebaut.</p>
-        </section>
-      </main>
-    );
-  }
-
-  if (!session) {
-    return (
-      <main className="planner-shell">
-        <section className="auth-card">
-          <h1>Kindergarten Wochenplanung</h1>
-          <p>
-            Die App ist bewusst schlank gehalten: anmelden, direkt schreiben und alle Aenderungen
-            live im Team sehen.
-          </p>
-          <form className="auth-form" onSubmit={sendMagicLink}>
-            <input
-              type="email"
-              placeholder="E-Mail-Adresse"
-              value={authEmail}
-              onChange={(event) => setAuthEmail(event.target.value)}
-              required
-            />
-            <button type="submit">Magic Link senden</button>
-          </form>
-          {authInfo ? <p className="status-pill live">{authInfo}</p> : null}
-          {error ? <div className="error-box">{error}</div> : null}
+          <p className="muted">Daten werden geladen.</p>
         </section>
       </main>
     );
@@ -1041,18 +1093,12 @@ export function PlannerApp() {
       <header className="app-header">
         <div>
           <h1 className="planner-title">Kindergarten Wochenplanung</h1>
-          <p className="muted">
-            Eingeloggt als <strong>{getDisplayName(session.user)}</strong>. Alle Aenderungen werden
-            live synchronisiert.
-          </p>
+          <p className="muted">Alle Aenderungen werden live synchronisiert.</p>
         </div>
         <div className="header-actions">
           <span className="status-pill live">{savingKey ? "Speichert..." : "Live verbunden"}</span>
           <button className="secondary" onClick={createWeek} type="button">
             Neue Woche erstellen
-          </button>
-          <button onClick={signOut} type="button">
-            Abmelden
           </button>
         </div>
       </header>
