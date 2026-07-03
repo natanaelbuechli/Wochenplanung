@@ -422,6 +422,8 @@ button {
   display: grid;
   gap: 5px;
   margin-top: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .appointment-item {
@@ -433,36 +435,21 @@ button {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.5);
   padding: 6px 8px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .appointment-copy {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
   color: #58786f;
   font-size: 0.72rem;
   line-height: 1.25;
-}
-
-.appointment-icon {
-  position: relative;
-  flex: 0 0 12px;
-  width: 12px;
-  height: 12px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-}
-
-.appointment-icon::before {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  right: 2px;
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
 }
 
 .appointment-time {
@@ -472,6 +459,7 @@ button {
 }
 
 .appointment-title-text {
+  flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -479,6 +467,7 @@ button {
 }
 
 .appointment-remove {
+  flex: 0 0 auto;
   border: 0;
   background: transparent;
   color: rgba(95, 143, 132, 0.78);
@@ -549,6 +538,26 @@ button {
   justify-content: flex-end;
   gap: 14px;
   margin-top: 6px;
+}
+
+@media (max-width: 700px) {
+  .appointment-item {
+    padding: 5px 7px;
+  }
+
+  .appointment-copy {
+    font-size: 0.68rem;
+  }
+
+  .appointment-item[data-has-time="true"] .appointment-title-text {
+    display: none;
+  }
+
+  .appointment-item[data-has-time="true"] .appointment-time {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .todo-item {

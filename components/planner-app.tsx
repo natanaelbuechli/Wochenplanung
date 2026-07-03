@@ -893,9 +893,12 @@ export function PlannerApp() {
                 {dayAppointments.length > 0 ? (
               <div className="appointment-stack">
                 {dayAppointments.map((appointment) => (
-                    <div className="appointment-item" key={appointment.id}>
+                    <div
+                      className="appointment-item"
+                      data-has-time={appointment.time_label ? "true" : "false"}
+                      key={appointment.id}
+                    >
                       <div className="appointment-copy">
-                        <span className="appointment-icon" aria-hidden="true" />
                         {appointment.time_label ? (
                           <span className="appointment-time">{appointment.time_label}</span>
                         ) : null}
