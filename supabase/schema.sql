@@ -31,6 +31,16 @@ create table if not exists public.todos (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.appointments (
+  id uuid primary key default gen_random_uuid(),
+  week_id uuid not null references public.weeks(id) on delete cascade,
+  day text not null check (day in ('Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag')),
+  title text not null,
+  time_label text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null unique,
@@ -61,6 +71,12 @@ before update on public.todos
 for each row
 execute function public.handle_updated_at();
 
+drop trigger if exists set_appointments_updated_at on public.appointments;
+create trigger set_appointments_updated_at
+before update on public.appointments
+for each row
+execute function public.handle_updated_at();
+
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
 before update on public.profiles
@@ -70,6 +86,7 @@ execute function public.handle_updated_at();
 alter table public.weeks enable row level security;
 alter table public.entries enable row level security;
 alter table public.todos enable row level security;
+alter table public.appointments enable row level security;
 alter table public.profiles enable row level security;
 
 drop policy if exists "authenticated users manage weeks" on public.weeks;
@@ -91,6 +108,14 @@ with check (true);
 drop policy if exists "authenticated users manage todos" on public.todos;
 create policy "authenticated users manage todos"
 on public.todos
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "authenticated users manage appointments" on public.appointments;
+create policy "authenticated users manage appointments"
+on public.appointments
 for all
 to authenticated
 using (true)
@@ -135,6 +160,14 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'todos'
   ) then
     alter publication supabase_realtime add table public.todos;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'appointments'
+  ) then
+    alter publication supabase_realtime add table public.appointments;
   end if;
 
   if not exists (

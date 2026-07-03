@@ -3,12 +3,22 @@
 import { FormEvent, TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import { DAYS, TIMES, type Day, type Entry, type TimeSlot, type Todo, type Week } from "@/lib/types";
+import { DAYS, TIMES, type Appointment, type Day, type Entry, type TimeSlot, type Todo, type Week } from "@/lib/types";
 
 const supabase = createBrowserSupabaseClient();
 
 type EntryDrafts = Record<string, string>;
 type TodoDrafts = Record<string, string>;
+type AppointmentDraft = {
+  title: string;
+  time_label: string;
+};
+type AppointmentDrafts = Record<string, AppointmentDraft>;
+
+const EMPTY_APPOINTMENT_DRAFT: AppointmentDraft = {
+  title: "",
+  time_label: ""
+};
 
 function getEntryKey(day: Day, time: TimeSlot) {
   return `${day}-${time}`;
@@ -88,6 +98,10 @@ function buildTodoDrafts(todos: Todo[]) {
   }, {});
 }
 
+function getAppointmentEditorKey(weekId: string, day: Day) {
+  return `${weekId}-${day}`;
+}
+
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("de-CH", {
     day: "2-digit",
@@ -165,6 +179,9 @@ export function PlannerApp() {
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [entriesByWeek, setEntriesByWeek] = useState<Record<string, Entry[]>>({});
+  const [appointmentsByWeek, setAppointmentsByWeek] = useState<Record<string, Appointment[]>>({});
+  const [appointmentDrafts, setAppointmentDrafts] = useState<AppointmentDrafts>({});
+  const [openAppointmentEditors, setOpenAppointmentEditors] = useState<Record<string, boolean>>({});
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragAnimating, setIsDragAnimating] = useState(false);
   const saveTimers = useRef<Record<string, number>>({});
@@ -362,6 +379,50 @@ export function PlannerApp() {
     }));
   }
 
+  async function loadAppointments(weekId: string | null) {
+    if (!weekId) {
+      return;
+    }
+
+    const { data, error: appointmentsError } = await supabase
+      .from("appointments")
+      .select("*")
+      .eq("week_id", weekId)
+      .order("created_at", { ascending: true });
+
+    if (appointmentsError) {
+      setError(appointmentsError.message);
+      return;
+    }
+
+    setAppointmentsByWeek((current) => ({
+      ...current,
+      [weekId]: data ?? []
+    }));
+  }
+
+  async function loadWeekAppointmentsIntoCache(weekId: string | null) {
+    if (!weekId) {
+      return;
+    }
+
+    const { data, error: appointmentsError } = await supabase
+      .from("appointments")
+      .select("*")
+      .eq("week_id", weekId)
+      .order("created_at", { ascending: true });
+
+    if (appointmentsError) {
+      setError(appointmentsError.message);
+      return;
+    }
+
+    setAppointmentsByWeek((current) => ({
+      ...current,
+      [weekId]: data ?? []
+    }));
+  }
+
   useEffect(() => {
     selectedWeekIdRef.current = selectedWeekId;
   }, [selectedWeekId]);
@@ -380,6 +441,11 @@ export function PlannerApp() {
       .on("postgres_changes", { event: "*", schema: "public", table: "entries" }, () => {
         loadEntries(selectedWeekIdRef.current).catch((entryError: Error) => setError(entryError.message));
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "appointments" }, () => {
+        loadAppointments(selectedWeekIdRef.current).catch((appointmentsError: Error) =>
+          setError(appointmentsError.message)
+        );
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "todos" }, () => {
         bootstrap();
       })
@@ -393,18 +459,29 @@ export function PlannerApp() {
   }, []);
 
   useEffect(() => {
-    loadEntries(selectedWeekId).catch((entryError: Error) => setError(entryError.message));
+    Promise.all([
+      loadEntries(selectedWeekId),
+      loadAppointments(selectedWeekId)
+    ]).catch((loadError: Error) => setError(loadError.message));
   }, [selectedWeekId]);
 
   useEffect(() => {
     [previousActiveWeek?.id ?? null, nextActiveWeek?.id ?? null].forEach((weekId) => {
-      if (!weekId || entriesByWeek[weekId]) {
+      if (!weekId) {
         return;
       }
 
-      loadWeekEntriesIntoCache(weekId).catch((entryError: Error) => setError(entryError.message));
+      if (!entriesByWeek[weekId]) {
+        loadWeekEntriesIntoCache(weekId).catch((entryError: Error) => setError(entryError.message));
+      }
+
+      if (!appointmentsByWeek[weekId]) {
+        loadWeekAppointmentsIntoCache(weekId).catch((appointmentsError: Error) =>
+          setError(appointmentsError.message)
+        );
+      }
     });
-  }, [entriesByWeek, nextActiveWeek?.id, previousActiveWeek?.id]);
+  }, [appointmentsByWeek, entriesByWeek, nextActiveWeek?.id, previousActiveWeek?.id]);
 
   function handleEntryChange(day: Day, time: TimeSlot, value: string) {
     if (!activeWeek) {
@@ -639,6 +716,101 @@ export function PlannerApp() {
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
 
+  function openAppointmentEditor(weekId: string, day: Day) {
+    const editorKey = getAppointmentEditorKey(weekId, day);
+    setOpenAppointmentEditors((current) => ({
+      ...current,
+      [editorKey]: true
+    }));
+    setAppointmentDrafts((current) => ({
+      ...current,
+      [editorKey]: current[editorKey] ?? { ...EMPTY_APPOINTMENT_DRAFT }
+    }));
+  }
+
+  function closeAppointmentEditor(weekId: string, day: Day) {
+    const editorKey = getAppointmentEditorKey(weekId, day);
+    setOpenAppointmentEditors((current) => ({
+      ...current,
+      [editorKey]: false
+    }));
+    setAppointmentDrafts((current) => ({
+      ...current,
+      [editorKey]: { ...EMPTY_APPOINTMENT_DRAFT }
+    }));
+  }
+
+  function handleAppointmentDraftChange(
+    weekId: string,
+    day: Day,
+    field: keyof AppointmentDraft,
+    value: string
+  ) {
+    const editorKey = getAppointmentEditorKey(weekId, day);
+    setAppointmentDrafts((current) => ({
+      ...current,
+      [editorKey]: {
+        ...(current[editorKey] ?? EMPTY_APPOINTMENT_DRAFT),
+        [field]: value
+      }
+    }));
+  }
+
+  async function createAppointment(event: FormEvent<HTMLFormElement>, week: Week, day: Day) {
+    event.preventDefault();
+
+    const editorKey = getAppointmentEditorKey(week.id, day);
+    const draft = appointmentDrafts[editorKey] ?? EMPTY_APPOINTMENT_DRAFT;
+    const title = draft.title.trim();
+    const timeLabel = draft.time_label.trim();
+
+    if (!title) {
+      return;
+    }
+
+    const { data, error: appointmentError } = await supabase
+      .from("appointments")
+      .insert({
+        week_id: week.id,
+        day,
+        title,
+        time_label: timeLabel || null
+      })
+      .select()
+      .single();
+
+    if (appointmentError) {
+      setError(appointmentError.message);
+      return;
+    }
+
+    if (data) {
+      setAppointmentsByWeek((current) => ({
+        ...current,
+        [week.id]: [...(current[week.id] ?? []), data]
+      }));
+    }
+
+    closeAppointmentEditor(week.id, day);
+  }
+
+  async function deleteAppointment(weekId: string, appointmentId: string) {
+    setAppointmentsByWeek((current) => ({
+      ...current,
+      [weekId]: (current[weekId] ?? []).filter((appointment) => appointment.id !== appointmentId)
+    }));
+
+    const { error: appointmentError } = await supabase
+      .from("appointments")
+      .delete()
+      .eq("id", appointmentId);
+
+    if (appointmentError) {
+      setError(appointmentError.message);
+      loadAppointments(weekId).catch((reloadError: Error) => setError(reloadError.message));
+    }
+  }
+
   function getWeekDrafts(week: Week | null) {
     if (!week) {
       return {};
@@ -651,12 +823,21 @@ export function PlannerApp() {
     return buildEntryDrafts(entriesByWeek[week.id] ?? []);
   }
 
+  function getWeekAppointments(week: Week | null) {
+    if (!week) {
+      return [];
+    }
+
+    return appointmentsByWeek[week.id] ?? [];
+  }
+
   function renderWeekColumns(week: Week | null) {
     if (!week) {
       return <div className="planner-placeholder" />;
     }
 
     const drafts = getWeekDrafts(week);
+    const appointments = getWeekAppointments(week);
     const isCurrentCalendarWeek = week.start_date === currentWeekStart;
 
     return (
@@ -690,6 +871,79 @@ export function PlannerApp() {
                 </label>
               );
             })}
+            {week.id === selectedWeekId ? (
+              <div className="appointment-insert">
+                {openAppointmentEditors[getAppointmentEditorKey(week.id, day)] ? (
+                  <form
+                    className="appointment-form"
+                    onSubmit={(event) => createAppointment(event, week, day)}
+                  >
+                    <input
+                      type="text"
+                      placeholder="Termin"
+                      value={appointmentDrafts[getAppointmentEditorKey(week.id, day)]?.title ?? ""}
+                      onChange={(event) =>
+                        handleAppointmentDraftChange(week.id, day, "title", event.target.value)
+                      }
+                    />
+                    <div className="appointment-form-row">
+                      <input
+                        type="text"
+                        placeholder="Zeit"
+                        value={appointmentDrafts[getAppointmentEditorKey(week.id, day)]?.time_label ?? ""}
+                        onChange={(event) =>
+                          handleAppointmentDraftChange(week.id, day, "time_label", event.target.value)
+                        }
+                      />
+                      <button className="appointment-save" type="submit">
+                        Speichern
+                      </button>
+                    </div>
+                    <button
+                      className="appointment-cancel"
+                      onClick={() => closeAppointmentEditor(week.id, day)}
+                      type="button"
+                    >
+                      Abbrechen
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="appointment-add"
+                    onClick={() => openAppointmentEditor(week.id, day)}
+                    type="button"
+                  >
+                    + Termin einfuegen
+                  </button>
+                )}
+              </div>
+            ) : null}
+            {appointments.filter((appointment) => appointment.day === day).length > 0 ? (
+              <div className="appointment-stack">
+                {appointments
+                  .filter((appointment) => appointment.day === day)
+                  .map((appointment) => (
+                    <div className="appointment-item" key={appointment.id}>
+                      <div className="appointment-copy">
+                        <span className="appointment-icon" aria-hidden="true" />
+                        {appointment.time_label ? (
+                          <span className="appointment-time">{appointment.time_label}</span>
+                        ) : null}
+                        <span className="appointment-title-text">{appointment.title}</span>
+                      </div>
+                      {week.id === selectedWeekId ? (
+                        <button
+                          className="appointment-remove"
+                          onClick={() => deleteAppointment(week.id, appointment.id)}
+                          type="button"
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+              </div>
+            ) : null}
           </article>
         ))}
       </div>

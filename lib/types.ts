@@ -26,6 +26,14 @@ export type Entry = {
   content: string;
 };
 
+export type Appointment = {
+  id: string;
+  week_id: string;
+  day: Day;
+  title: string;
+  time_label: string | null;
+};
+
 export type Todo = {
   id: string;
   text: string;
