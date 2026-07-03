@@ -14,6 +14,10 @@ type AppointmentDraft = {
   time_label: string;
 };
 type AppointmentDrafts = Record<string, AppointmentDraft>;
+type ActiveAppointmentEditor = {
+  weekId: string;
+  day: Day;
+} | null;
 
 const EMPTY_APPOINTMENT_DRAFT: AppointmentDraft = {
   title: "",
@@ -181,7 +185,7 @@ export function PlannerApp() {
   const [entriesByWeek, setEntriesByWeek] = useState<Record<string, Entry[]>>({});
   const [appointmentsByWeek, setAppointmentsByWeek] = useState<Record<string, Appointment[]>>({});
   const [appointmentDrafts, setAppointmentDrafts] = useState<AppointmentDrafts>({});
-  const [openAppointmentEditors, setOpenAppointmentEditors] = useState<Record<string, boolean>>({});
+  const [activeAppointmentEditor, setActiveAppointmentEditor] = useState<ActiveAppointmentEditor>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragAnimating, setIsDragAnimating] = useState(false);
   const saveTimers = useRef<Record<string, number>>({});
@@ -718,10 +722,7 @@ export function PlannerApp() {
 
   function openAppointmentEditor(weekId: string, day: Day) {
     const editorKey = getAppointmentEditorKey(weekId, day);
-    setOpenAppointmentEditors((current) => ({
-      ...current,
-      [editorKey]: true
-    }));
+    setActiveAppointmentEditor({ weekId, day });
     setAppointmentDrafts((current) => ({
       ...current,
       [editorKey]: current[editorKey] ?? { ...EMPTY_APPOINTMENT_DRAFT }
@@ -730,10 +731,9 @@ export function PlannerApp() {
 
   function closeAppointmentEditor(weekId: string, day: Day) {
     const editorKey = getAppointmentEditorKey(weekId, day);
-    setOpenAppointmentEditors((current) => ({
-      ...current,
-      [editorKey]: false
-    }));
+    setActiveAppointmentEditor((current) =>
+      current?.weekId === weekId && current.day === day ? null : current
+    );
     setAppointmentDrafts((current) => ({
       ...current,
       [editorKey]: { ...EMPTY_APPOINTMENT_DRAFT }
@@ -831,6 +831,10 @@ export function PlannerApp() {
     return appointmentsByWeek[week.id] ?? [];
   }
 
+  const activeAppointmentEditorKey = activeAppointmentEditor
+    ? getAppointmentEditorKey(activeAppointmentEditor.weekId, activeAppointmentEditor.day)
+    : null;
+
   function renderWeekColumns(week: Week | null) {
     if (!week) {
       return <div className="planner-placeholder" />;
@@ -843,86 +847,52 @@ export function PlannerApp() {
     return (
       <div className="planning-table">
         {DAYS.map((day) => (
-          <article
-            className={`day-column ${isCurrentCalendarWeek && currentDayLabel === day ? "current-day" : ""}`}
-            data-day={day}
-            key={`${week.id}-${day}`}
-          >
-            <div className="day-header">
-              <strong>{getShortDayLabel(day)}</strong>
-              <span className="day-date">{getDayDateLabel(week.start_date, day)}</span>
-            </div>
-            {TIMES.map((time) => {
-              if (!isSlotAvailable(day, time)) {
-                return null;
-              }
+          (() => {
+            const dayAppointments = appointments.filter((appointment) => appointment.day === day);
 
-              const key = getEntryKey(day, time);
-              const isEditable = week.id === selectedWeekId;
+            return (
+              <article
+                className={`day-column ${isCurrentCalendarWeek && currentDayLabel === day ? "current-day" : ""}`}
+                data-day={day}
+                key={`${week.id}-${day}`}
+              >
+                <div className="day-header">
+                  <strong>{getShortDayLabel(day)}</strong>
+                  <span className="day-date">{getDayDateLabel(week.start_date, day)}</span>
+                </div>
+                {TIMES.map((time) => {
+                  if (!isSlotAvailable(day, time)) {
+                    return null;
+                  }
 
-              return (
-                <label className="day-cell" key={`${week.id}-${key}`}>
-                  <textarea
-                    placeholder={isEditable ? "Eintragen..." : ""}
-                    readOnly={!isEditable}
-                    value={drafts[key] ?? ""}
-                    onChange={(event) => handleEntryChange(day, time, event.target.value)}
-                  />
-                </label>
-              );
-            })}
-            {week.id === selectedWeekId ? (
-              <div className="appointment-insert">
-                {openAppointmentEditors[getAppointmentEditorKey(week.id, day)] ? (
-                  <form
-                    className="appointment-form"
-                    onSubmit={(event) => createAppointment(event, week, day)}
-                  >
-                    <input
-                      type="text"
-                      placeholder="Termin"
-                      value={appointmentDrafts[getAppointmentEditorKey(week.id, day)]?.title ?? ""}
-                      onChange={(event) =>
-                        handleAppointmentDraftChange(week.id, day, "title", event.target.value)
-                      }
-                    />
-                    <div className="appointment-form-row">
-                      <input
-                        type="text"
-                        placeholder="Zeit"
-                        value={appointmentDrafts[getAppointmentEditorKey(week.id, day)]?.time_label ?? ""}
-                        onChange={(event) =>
-                          handleAppointmentDraftChange(week.id, day, "time_label", event.target.value)
-                        }
+                  const key = getEntryKey(day, time);
+                  const isEditable = week.id === selectedWeekId;
+
+                  return (
+                    <label className="day-cell" key={`${week.id}-${key}`}>
+                      <textarea
+                        placeholder={isEditable ? "Eintragen..." : ""}
+                        readOnly={!isEditable}
+                        value={drafts[key] ?? ""}
+                        onChange={(event) => handleEntryChange(day, time, event.target.value)}
                       />
-                      <button className="appointment-save" type="submit">
-                        Speichern
-                      </button>
-                    </div>
+                    </label>
+                  );
+                })}
+                {week.id === selectedWeekId ? (
+                  <div className="appointment-insert">
                     <button
-                      className="appointment-cancel"
-                      onClick={() => closeAppointmentEditor(week.id, day)}
+                      className="appointment-add"
+                      onClick={() => openAppointmentEditor(week.id, day)}
                       type="button"
                     >
-                      Abbrechen
+                      + Termin einfuegen
                     </button>
-                  </form>
-                ) : (
-                  <button
-                    className="appointment-add"
-                    onClick={() => openAppointmentEditor(week.id, day)}
-                    type="button"
-                  >
-                    + Termin einfuegen
-                  </button>
-                )}
-              </div>
-            ) : null}
-            {appointments.filter((appointment) => appointment.day === day).length > 0 ? (
+                  </div>
+                ) : null}
+                {dayAppointments.length > 0 ? (
               <div className="appointment-stack">
-                {appointments
-                  .filter((appointment) => appointment.day === day)
-                  .map((appointment) => (
+                {dayAppointments.map((appointment) => (
                     <div className="appointment-item" key={appointment.id}>
                       <div className="appointment-copy">
                         <span className="appointment-icon" aria-hidden="true" />
@@ -943,8 +913,10 @@ export function PlannerApp() {
                     </div>
                   ))}
               </div>
-            ) : null}
-          </article>
+                ) : null}
+              </article>
+            );
+          })()
         ))}
       </div>
     );
@@ -1398,6 +1370,77 @@ export function PlannerApp() {
           </div>
         </aside>
       </section>
+
+      {activeAppointmentEditor && activeWeek?.id === activeAppointmentEditor.weekId ? (
+        <div
+          className="appointment-modal-backdrop"
+          onClick={() => closeAppointmentEditor(activeAppointmentEditor.weekId, activeAppointmentEditor.day)}
+          role="presentation"
+        >
+          <div
+            className="appointment-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Termin einfuegen"
+          >
+            <div className="appointment-modal-header">
+              <div>
+                <h3>Termin einfuegen</h3>
+                <p className="muted">
+                  {getShortDayLabel(activeAppointmentEditor.day)} {getDayDateLabel(activeWeek.start_date, activeAppointmentEditor.day)}
+                </p>
+              </div>
+              <button
+                className="appointment-modal-close"
+                onClick={() => closeAppointmentEditor(activeAppointmentEditor.weekId, activeAppointmentEditor.day)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <form
+              className="appointment-modal-form"
+              onSubmit={(event) => createAppointment(event, activeWeek, activeAppointmentEditor.day)}
+            >
+              <input
+                type="text"
+                placeholder="Termin"
+                value={appointmentDrafts[activeAppointmentEditorKey ?? ""]?.title ?? ""}
+                onChange={(event) =>
+                  handleAppointmentDraftChange(
+                    activeAppointmentEditor.weekId,
+                    activeAppointmentEditor.day,
+                    "title",
+                    event.target.value
+                  )
+                }
+              />
+              <input
+                type="text"
+                placeholder="Zeit, z. B. 14:00"
+                value={appointmentDrafts[activeAppointmentEditorKey ?? ""]?.time_label ?? ""}
+                onChange={(event) =>
+                  handleAppointmentDraftChange(
+                    activeAppointmentEditor.weekId,
+                    activeAppointmentEditor.day,
+                    "time_label",
+                    event.target.value
+                  )
+                }
+              />
+              <div className="appointment-modal-actions">
+                <button className="appointment-cancel" type="button" onClick={() => closeAppointmentEditor(activeAppointmentEditor.weekId, activeAppointmentEditor.day)}>
+                  Abbrechen
+                </button>
+                <button className="appointment-save" type="submit">
+                  Speichern
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
