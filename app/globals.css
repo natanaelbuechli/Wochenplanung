@@ -453,6 +453,16 @@ button {
   line-height: 1.25;
 }
 
+.appointment-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}
+
 .appointment-time {
   flex: 0 0 auto;
   font-weight: 700;

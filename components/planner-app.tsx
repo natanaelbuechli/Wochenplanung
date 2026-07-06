@@ -17,6 +17,7 @@ type AppointmentDrafts = Record<string, AppointmentDraft>;
 type ActiveAppointmentEditor = {
   weekId: string;
   day: Day;
+  appointmentId: string | null;
 } | null;
 
 const EMPTY_APPOINTMENT_DRAFT: AppointmentDraft = {
@@ -720,12 +721,21 @@ export function PlannerApp() {
     element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
   }
 
-  function openAppointmentEditor(weekId: string, day: Day) {
+  function openAppointmentEditor(weekId: string, day: Day, appointment?: Appointment) {
     const editorKey = getAppointmentEditorKey(weekId, day);
-    setActiveAppointmentEditor({ weekId, day });
+    setActiveAppointmentEditor({
+      weekId,
+      day,
+      appointmentId: appointment?.id ?? null
+    });
     setAppointmentDrafts((current) => ({
       ...current,
-      [editorKey]: current[editorKey] ?? { ...EMPTY_APPOINTMENT_DRAFT }
+      [editorKey]: appointment
+        ? {
+            title: appointment.title ?? "",
+            time_label: appointment.time_label ?? ""
+          }
+        : (current[editorKey] ?? { ...EMPTY_APPOINTMENT_DRAFT })
     }));
   }
 
@@ -765,6 +775,38 @@ export function PlannerApp() {
     const timeLabel = draft.time_label.trim();
 
     if (!title) {
+      return;
+    }
+
+    if (activeAppointmentEditor?.appointmentId) {
+      const appointmentId = activeAppointmentEditor.appointmentId;
+      const { error: appointmentError } = await supabase
+        .from("appointments")
+        .update({
+          title,
+          time_label: timeLabel || null
+        })
+        .eq("id", appointmentId);
+
+      if (appointmentError) {
+        setError(appointmentError.message);
+        return;
+      }
+
+      setAppointmentsByWeek((current) => ({
+        ...current,
+        [week.id]: (current[week.id] ?? []).map((appointment) =>
+          appointment.id === appointmentId
+            ? {
+                ...appointment,
+                title,
+                time_label: timeLabel || null
+              }
+            : appointment
+        )
+      }));
+
+      closeAppointmentEditor(week.id, day);
       return;
     }
 
@@ -898,12 +940,18 @@ export function PlannerApp() {
                       data-has-time={appointment.time_label ? "true" : "false"}
                       key={appointment.id}
                     >
-                      <div className="appointment-copy">
+                      <button
+                        className="appointment-open"
+                        onClick={() => openAppointmentEditor(week.id, day, appointment)}
+                        type="button"
+                      >
+                        <div className="appointment-copy">
                         {appointment.time_label ? (
                           <span className="appointment-time">{appointment.time_label}</span>
                         ) : null}
                         <span className="appointment-title-text">{appointment.title}</span>
-                      </div>
+                        </div>
+                      </button>
                       {week.id === selectedWeekId ? (
                         <button
                           className="appointment-remove"
@@ -1380,16 +1428,16 @@ export function PlannerApp() {
           onClick={() => closeAppointmentEditor(activeAppointmentEditor.weekId, activeAppointmentEditor.day)}
           role="presentation"
         >
-          <div
-            className="appointment-modal"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Termin einfuegen"
-          >
-            <div className="appointment-modal-header">
-              <div>
-                <h3>Termin einfuegen</h3>
+              <div
+                className="appointment-modal"
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+            aria-label={activeAppointmentEditor.appointmentId ? "Termin bearbeiten" : "Termin einfuegen"}
+              >
+              <div className="appointment-modal-header">
+                <div>
+                <h3>{activeAppointmentEditor.appointmentId ? "Termin bearbeiten" : "Termin einfuegen"}</h3>
                 <p className="muted">
                   {getShortDayLabel(activeAppointmentEditor.day)} {getDayDateLabel(activeWeek.start_date, activeAppointmentEditor.day)}
                 </p>
@@ -1437,7 +1485,7 @@ export function PlannerApp() {
                   Abbrechen
                 </button>
                 <button className="appointment-save" type="submit">
-                  Speichern
+                  {activeAppointmentEditor.appointmentId ? "Aktualisieren" : "Speichern"}
                 </button>
               </div>
             </form>
