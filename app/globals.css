@@ -172,6 +172,18 @@ button {
   box-shadow: none;
 }
 
+.header-link-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 12px 16px;
+  border: 1px solid rgba(112, 129, 120, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+  color: #4b7b70;
+  text-decoration: none;
+}
+
 .section-title {
   display: flex;
   justify-content: space-between;
@@ -698,6 +710,140 @@ button {
   gap: 8px;
 }
 
+.print-shell {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.print-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.print-header h1 {
+  margin: 8px 0 6px;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+}
+
+.print-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.print-back-link {
+  color: #4b7b70;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.print-button,
+.print-month-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 16px;
+  background: rgba(110, 169, 155, 0.14);
+  color: #4f8075;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.print-month-button {
+  min-width: 44px;
+  padding-inline: 0;
+}
+
+.print-panel {
+  background: rgba(255, 253, 248, 0.97);
+  border: 1px solid rgba(217, 216, 207, 0.95);
+  border-radius: 24px;
+  padding: 22px;
+  box-shadow: 0 18px 36px var(--shadow);
+}
+
+.print-landscape-sheet {
+  overflow-x: auto;
+}
+
+.print-grid-header,
+.print-week-row {
+  display: grid;
+  grid-template-columns: 72px repeat(5, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.print-grid-header {
+  margin-bottom: 10px;
+}
+
+.print-grid-body {
+  display: grid;
+  gap: 8px;
+}
+
+.print-kw-head,
+.print-day-head,
+.print-kw-cell,
+.print-day-cell {
+  border: 1px solid rgba(112, 129, 120, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.print-kw-head,
+.print-day-head {
+  padding: 10px 12px;
+  color: #5f8f84;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.print-kw-cell {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12px 8px;
+  color: #4b7b70;
+  font-weight: 700;
+}
+
+.print-day-cell {
+  min-height: 162px;
+  padding: 10px 12px;
+}
+
+.print-day-cell.is-muted {
+  opacity: 0.42;
+}
+
+.print-day-date {
+  margin-bottom: 8px;
+  color: #5f8f84;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.print-entry-line,
+.print-appointment-line {
+  margin: 0 0 6px;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.print-entry-line.secondary {
+  color: #4a544f;
+}
+
+.print-appointment-line {
+  color: #5d7d74;
+  font-size: 0.8rem;
+}
+
 @media (max-width: 1100px) {
   .planner-layout {
     grid-template-columns: 1fr;
@@ -760,6 +906,10 @@ button {
   .planner-title {
     font-size: 1.1rem;
     letter-spacing: 0.02em;
+  }
+
+  .header-link-pill {
+    padding: 9px 12px;
   }
 
   .muted {
@@ -849,5 +999,85 @@ button {
 
   .appointment-item[data-has-time="true"] .appointment-time {
     font-size: 0.54rem;
+  }
+
+  .print-shell {
+    padding: 12px;
+  }
+
+  .print-header {
+    flex-direction: column;
+    margin-bottom: 12px;
+  }
+
+  .print-panel {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .print-grid-header,
+  .print-week-row {
+    grid-template-columns: 52px repeat(5, minmax(120px, 1fr));
+    gap: 5px;
+  }
+
+  .print-kw-head,
+  .print-day-head,
+  .print-kw-cell {
+    padding: 8px 6px;
+    font-size: 0.68rem;
+  }
+
+  .print-day-cell {
+    min-height: 120px;
+    padding: 8px;
+  }
+
+  .print-entry-line,
+  .print-appointment-line {
+    font-size: 0.72rem;
+    margin-bottom: 5px;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body {
+    background: white;
+  }
+
+  .print-shell {
+    padding: 0;
+  }
+
+  .print-header {
+    margin-bottom: 10px;
+  }
+
+  .print-actions,
+  .print-back-link {
+    display: none;
+  }
+
+  .print-panel {
+    border: 0;
+    box-shadow: none;
+    background: white;
+    padding: 0;
+  }
+
+  .print-grid-header,
+  .print-week-row {
+    grid-template-columns: 58px repeat(5, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .print-day-cell {
+    min-height: 124px;
+    break-inside: avoid;
   }
 }

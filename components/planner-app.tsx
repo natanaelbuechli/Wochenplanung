@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, TouchEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { DAYS, TIMES, type Appointment, type Day, type Entry, type TimeSlot, type Todo, type Week } from "@/lib/types";
@@ -1148,6 +1149,9 @@ export function PlannerApp() {
           >
             {savingKey ? "Speichert..." : isRefreshing ? "Aktualisiert..." : "Live verbunden"}
           </button>
+          <Link className="header-link-pill" href="/druckansicht">
+            Druckansicht
+          </Link>
           <button className="secondary" onClick={createWeek} type="button">
             Neue Woche erstellen
           </button>
