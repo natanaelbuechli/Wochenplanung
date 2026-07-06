@@ -185,6 +185,7 @@ function getDefaultWeek(weeks: Week[], currentWeekStart: string) {
 
 export function PlannerApp() {
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -345,6 +346,17 @@ export function PlannerApp() {
 
         return nextDrafts;
       });
+    }
+  }
+
+  async function refreshPlanner() {
+    setIsRefreshing(true);
+    try {
+      await bootstrap();
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "Aktualisierung fehlgeschlagen.");
+    } finally {
+      setIsRefreshing(false);
     }
   }
 
@@ -1129,7 +1141,13 @@ export function PlannerApp() {
           <p className="muted">Alle Aenderungen werden live synchronisiert.</p>
         </div>
         <div className="header-actions">
-          <span className="status-pill live">{savingKey ? "Speichert..." : "Live verbunden"}</span>
+          <button
+            className="status-pill live status-pill-button"
+            onClick={() => refreshPlanner()}
+            type="button"
+          >
+            {savingKey ? "Speichert..." : isRefreshing ? "Aktualisiert..." : "Live verbunden"}
+          </button>
           <button className="secondary" onClick={createWeek} type="button">
             Neue Woche erstellen
           </button>
