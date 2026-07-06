@@ -840,7 +840,11 @@ button {
 }
 
 .print-appointment-line {
-  color: #5d7d74;
+  color: #6c5f8d;
+  background: rgba(108, 95, 141, 0.08);
+  border-left: 3px solid rgba(108, 95, 141, 0.32);
+  padding: 4px 6px;
+  border-radius: 8px;
   font-size: 0.8rem;
 }
 
@@ -1038,6 +1042,11 @@ button {
     font-size: 0.72rem;
     margin-bottom: 5px;
   }
+
+  .print-appointment-line {
+    padding: 3px 5px;
+    border-radius: 6px;
+  }
 }
 
 @media print {
@@ -1079,5 +1088,10 @@ button {
   .print-day-cell {
     min-height: 124px;
     break-inside: avoid;
+  }
+
+  .print-appointment-line {
+    background: rgba(108, 95, 141, 0.06);
+    border-left-color: rgba(108, 95, 141, 0.24);
   }
 }
