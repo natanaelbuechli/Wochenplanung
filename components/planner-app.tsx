@@ -169,6 +169,20 @@ function getNextWeekData(weeks: Week[]) {
   };
 }
 
+function getDefaultWeek(weeks: Week[], currentWeekStart: string) {
+  const activeWeeks = weeks
+    .filter((week) => !week.archived)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+  return (
+    activeWeeks.find((week) => week.start_date === currentWeekStart) ??
+    activeWeeks.find((week) => week.start_date > currentWeekStart) ??
+    activeWeeks.at(-1) ??
+    weeks[0] ??
+    null
+  );
+}
+
 export function PlannerApp() {
   const [loading, setLoading] = useState(true);
   const [weeks, setWeeks] = useState<Week[]>([]);
@@ -310,11 +324,7 @@ export function PlannerApp() {
       const needsSelectionReset = !selectedWeek || selectedWeek.archived;
 
       if (needsSelectionReset) {
-        const initialWeek =
-          loadedWeeks.find((week) => !week.archived && week.start_date === currentWeekStart) ??
-          loadedWeeks.find((week) => !week.archived) ??
-          loadedWeeks[0] ??
-          null;
+        const initialWeek = getDefaultWeek(loadedWeeks, currentWeekStart);
         setSelectedWeekId(initialWeek?.id ?? null);
       }
     }
