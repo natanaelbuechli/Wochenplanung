@@ -904,20 +904,54 @@ button {
   }
 
   .app-header {
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .planner-title {
-    font-size: 1.1rem;
-    letter-spacing: 0.02em;
-  }
-
-  .header-link-pill {
-    padding: 9px 12px;
+    font-size: 0.98rem;
+    letter-spacing: 0.01em;
+    line-height: 1.08;
   }
 
   .muted {
-    font-size: 0.9rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .header-actions > * {
+    min-width: 0;
+  }
+
+  .status-pill,
+  .header-link-pill,
+  .header-actions button {
+    justify-content: center;
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    font-size: 0.74rem;
+    line-height: 1.15;
+    box-shadow: none;
+  }
+
+  .status-pill {
+    gap: 6px;
+  }
+
+  .status-pill.live::before {
+    width: 6px;
+    height: 6px;
   }
 
   .section-title {
