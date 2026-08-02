@@ -800,7 +800,7 @@ export function PlannerApp() {
 
   function autoResizeTodoField(element: HTMLTextAreaElement) {
     element.style.height = "0px";
-    element.style.height = `${Math.min(element.scrollHeight, 160)}px`;
+    element.style.height = `${element.scrollHeight}px`;
   }
 
   function openAppointmentEditor(weekId: string, day: Day, appointment?: Appointment) {
@@ -1432,6 +1432,9 @@ export function PlannerApp() {
                       />
                       <textarea
                         className="todo-text"
+                        ref={(element) => {
+                          if (element) autoResizeTodoField(element);
+                        }}
                         rows={1}
                         value={todoDrafts[todo.id] ?? todo.text}
                         onChange={(event) => {
@@ -1472,6 +1475,9 @@ export function PlannerApp() {
                               />
                               <textarea
                                 className="todo-text"
+                                ref={(element) => {
+                                  if (element) autoResizeTodoField(element);
+                                }}
                                 rows={1}
                                 value={todoDrafts[todo.id] ?? todo.text}
                                 onChange={(event) => {
