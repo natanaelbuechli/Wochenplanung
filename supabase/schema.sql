@@ -27,9 +27,14 @@ create table if not exists public.todos (
   text text not null,
   completed boolean not null default false,
   assigned_to text,
+  position bigint not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.todos
+add column if not exists position bigint not null default 0;
+
 
 create table if not exists public.appointments (
   id uuid primary key default gen_random_uuid(),
