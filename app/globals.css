@@ -227,6 +227,17 @@ button {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.82);
+  cursor: grab;
+  transition: opacity 120ms ease, border-color 120ms ease;
+}
+
+.todo-item:active {
+  cursor: grabbing;
+}
+
+.todo-item-dragging {
+  opacity: 0.48;
+  border-color: rgba(110, 169, 155, 0.6);
   padding: 12px;
 }
 
@@ -581,26 +592,36 @@ button {
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  .todo-text {
+    font-size: 0.86rem;
+  }
 }
 
 .todo-item {
   display: grid;
-  gap: 8px;
-  padding: 14px;
+  gap: 4px;
+  padding: 7px 9px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .todo-item-secondary {
   background: rgba(255, 255, 255, 0.55);
 }
 
+.todo-item-completed {
+  border-left-color: rgba(112, 129, 120, 0.3);
+}
+
 .todo-topline {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
 
 .todo-topline input[type="checkbox"] {
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .todo-item.completed {
@@ -618,21 +639,33 @@ button {
   border: 0;
   background: transparent;
   padding: 0;
-  height: 1.5em;
-  min-height: 1.5em;
-  max-height: 110px;
-  resize: none;
+  height: 1.35em;
+  min-height: 1.35em;
+  max-height: 120px;
+  resize: vertical;
   color: inherit;
-  font-size: 1rem;
+  font-size: 0.92rem;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.35;
   overflow: auto;
 }
 
 .todo-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.todo-sort-select {
+  border: 1px solid rgba(112, 129, 120, 0.16);
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 10px;
+  min-width: 0;
+  font-size: 0.76rem;
+  font-weight: 600;
 }
 
 .assign-chip {
@@ -645,6 +678,39 @@ button {
   font-size: 0.78rem;
   font-weight: 600;
   box-shadow: none;
+}
+
+.todo-order-controls {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.todo-drag-handle {
+  color: rgba(82, 122, 113, 0.62);
+  font-size: 0.8rem;
+  line-height: 1;
+  letter-spacing: -0.18em;
+  user-select: none;
+  touch-action: none;
+}
+
+.todo-order-controls button {
+  width: 25px;
+  height: 25px;
+  border: 1px solid rgba(112, 129, 120, 0.14);
+  border-radius: 999px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.7);
+  color: #62877f;
+  font-size: 0.72rem;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.todo-order-controls button:disabled {
+  opacity: 0.22;
+  cursor: default;
 }
 
 .assign-chip:hover {
@@ -958,6 +1024,11 @@ button {
     align-items: flex-start;
   }
 
+  .todo-sort-select {
+    font-size: 0.68rem;
+    padding: 4px 8px;
+  }
+
   .week-nav {
     gap: 4px;
   }
@@ -1037,6 +1108,25 @@ button {
 
   .appointment-item[data-has-time="true"] .appointment-time {
     font-size: 0.54rem;
+  }
+
+  .todo-item {
+    padding: 6px 7px;
+    gap: 4px;
+  }
+
+  .todo-topline {
+    gap: 6px;
+  }
+
+  .todo-text {
+    font-size: 0.76rem;
+    line-height: 1.28;
+  }
+
+  .assign-chip {
+    padding: 3px 6px;
+    font-size: 0.68rem;
   }
 
   .print-shell {

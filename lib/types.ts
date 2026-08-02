@@ -39,6 +39,7 @@ export type Todo = {
   text: string;
   completed: boolean;
   assigned_to: string | null;
+  position: number;
 };
 
 export type Profile = {

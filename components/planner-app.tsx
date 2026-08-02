@@ -197,6 +197,8 @@ export function PlannerApp() {
   const [showOtherTodos, setShowOtherTodos] = useState(false);
   const [showCompletedTodos, setShowCompletedTodos] = useState(false);
   const [showArchivedWeeks, setShowArchivedWeeks] = useState(false);
+  const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
+  const [dragTodoOrder, setDragTodoOrder] = useState<string[] | null>(null);
   const [error, setError] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [entriesByWeek, setEntriesByWeek] = useState<Record<string, Entry[]>>({});
@@ -207,6 +209,10 @@ export function PlannerApp() {
   const [isDragAnimating, setIsDragAnimating] = useState(false);
   const saveTimers = useRef<Record<string, number>>({});
   const todoSaveTimers = useRef<Record<string, number>>({});
+  const draggedTodoIdRef = useRef<string | null>(null);
+  const dragTodoOrderRef = useRef<string[] | null>(null);
+  const todoTouchHoldTimerRef = useRef<number | null>(null);
+  const todoTouchStartYRef = useRef<number | null>(null);
   const selectedWeekIdRef = useRef<string | null>(null);
   const swipeStartXRef = useRef<number | null>(null);
   const swipeStartYRef = useRef<number | null>(null);
@@ -264,14 +270,30 @@ export function PlannerApp() {
     return Array.from(new Set(todoNames)).sort((a, b) => a.localeCompare(b, "de"));
   }, [todos]);
 
-  const visibleOpenTodos = useMemo(
-    () => todos.filter((todo) => !todo.completed),
-    [todos]
-  );
+  const visibleOpenTodos = useMemo(() => {
+    const openTodos = todos.filter((todo) => !todo.completed);
+
+    if (dragTodoOrder) {
+      const orderById = new Map(dragTodoOrder.map((todoId, index) => [todoId, index]));
+      return [...openTodos].sort(
+        (a, b) =>
+          (orderById.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (orderById.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+      );
+    }
+
+    return [...openTodos].sort((a, b) => a.position - b.position);
+  }, [dragTodoOrder, todos]);
 
   const otherOpenTodos = useMemo(() => [] as Todo[], []);
 
-  const completedTodos = useMemo(() => todos.filter((todo) => todo.completed), [todos]);
+  const completedTodos = useMemo(
+    () =>
+      [...todos.filter((todo) => todo.completed)].sort((a, b) =>
+        a.text.localeCompare(b.text, "de")
+      ),
+    [todos]
+  );
 
   async function archivePastWeeks() {
     const { error: archiveError } = await supabase
@@ -313,7 +335,7 @@ export function PlannerApp() {
 
     const [weeksResult, todosResult] = await Promise.all([
       supabase.from("weeks").select("*").order("start_date", { ascending: false }),
-      supabase.from("todos").select("*").order("completed", { ascending: true }).order("id", { ascending: false })
+      supabase.from("todos").select("*").order("completed", { ascending: true }).order("position", { ascending: true })
     ]);
 
     if (weeksResult.error) {
@@ -483,6 +505,9 @@ export function PlannerApp() {
       supabase.removeChannel(realtimeChannel);
       Object.values(saveTimers.current).forEach((timer) => window.clearTimeout(timer));
       Object.values(todoSaveTimers.current).forEach((timer) => window.clearTimeout(timer));
+      if (todoTouchHoldTimerRef.current) {
+        window.clearTimeout(todoTouchHoldTimerRef.current);
+      }
     };
   }, []);
 
@@ -665,12 +690,14 @@ export function PlannerApp() {
       return;
     }
 
+    const firstPosition = visibleOpenTodos[0]?.position ?? 1000;
     const { data, error: todoError } = await supabase
       .from("todos")
       .insert({
         text: todoDraft.trim(),
         completed: false,
-        assigned_to: null
+        assigned_to: null,
+        position: firstPosition - 1000
       })
       .select()
       .single();
@@ -737,6 +764,85 @@ export function PlannerApp() {
     await updateTodo(todo.id, {
       assigned_to: getNextAssignee(assignableUsers, todo.assigned_to ?? null)
     });
+  }
+
+  async function persistTodoOrder(orderedIds: string[]) {
+    const positions = new Map(orderedIds.map((todoId, index) => [todoId, (index + 1) * 1000]));
+    setTodos((current) =>
+      current.map((todo) =>
+        positions.has(todo.id) ? { ...todo, position: positions.get(todo.id) ?? todo.position } : todo
+      )
+    );
+
+    const results = await Promise.all(
+      orderedIds.map((todoId, index) =>
+        supabase.from("todos").update({ position: (index + 1) * 1000 }).eq("id", todoId)
+      )
+    );
+    const moveError = results.find((result) => result.error)?.error;
+    if (moveError) {
+      setError(moveError.message);
+      bootstrap().catch((bootstrapError: Error) => setError(bootstrapError.message));
+    }
+  }
+
+  function moveTodo(todoId: string, direction: -1 | 1) {
+    const orderedIds = visibleOpenTodos.map((todo) => todo.id);
+    const currentIndex = orderedIds.indexOf(todoId);
+    const nextIndex = currentIndex + direction;
+
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedIds.length) {
+      return;
+    }
+
+    [orderedIds[currentIndex], orderedIds[nextIndex]] = [orderedIds[nextIndex], orderedIds[currentIndex]];
+    void persistTodoOrder(orderedIds);
+  }
+
+  function beginTodoDrag(todoId: string) {
+    const orderedIds = visibleOpenTodos.map((todo) => todo.id);
+    draggedTodoIdRef.current = todoId;
+    dragTodoOrderRef.current = orderedIds;
+    setDraggedTodoId(todoId);
+    setDragTodoOrder(orderedIds);
+  }
+
+  function moveDraggedTodoOver(targetTodoId: string) {
+    const activeTodoId = draggedTodoIdRef.current;
+    const currentOrder = dragTodoOrderRef.current;
+    if (!activeTodoId || !currentOrder || activeTodoId === targetTodoId) {
+      return;
+    }
+
+    const nextOrder = [...currentOrder];
+    const currentIndex = nextOrder.indexOf(activeTodoId);
+    const targetIndex = nextOrder.indexOf(targetTodoId);
+    if (currentIndex < 0 || targetIndex < 0) {
+      return;
+    }
+
+    nextOrder.splice(currentIndex, 1);
+    nextOrder.splice(targetIndex, 0, activeTodoId);
+    dragTodoOrderRef.current = nextOrder;
+    setDragTodoOrder(nextOrder);
+  }
+
+  function finishTodoDrag() {
+    if (todoTouchHoldTimerRef.current) {
+      window.clearTimeout(todoTouchHoldTimerRef.current);
+      todoTouchHoldTimerRef.current = null;
+    }
+
+    const finalOrder = dragTodoOrderRef.current;
+    draggedTodoIdRef.current = null;
+    dragTodoOrderRef.current = null;
+    todoTouchStartYRef.current = null;
+    setDraggedTodoId(null);
+    setDragTodoOrder(null);
+
+    if (finalOrder) {
+      void persistTodoOrder(finalOrder);
+    }
   }
 
   function autoResizeTodoField(element: HTMLTextAreaElement) {
@@ -1309,8 +1415,58 @@ export function PlannerApp() {
               <div className="empty-state">Noch keine To-dos vorhanden.</div>
             ) : (
               <>
-                {visibleOpenTodos.map((todo) => (
-                  <article className="todo-item" key={todo.id}>
+                {visibleOpenTodos.map((todo, todoIndex) => (
+                  <article
+                    className={`todo-item ${draggedTodoId === todo.id ? "todo-item-dragging" : ""}`}
+                    data-todo-id={todo.id}
+                    draggable
+                    key={todo.id}
+                    onDragEnd={finishTodoDrag}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      moveDraggedTodoOver(todo.id);
+                    }}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", todo.id);
+                      beginTodoDrag(todo.id);
+                    }}
+                    onTouchEnd={finishTodoDrag}
+                    onTouchMove={(event) => {
+                      const touch = event.touches[0];
+                      if (!touch) {
+                        return;
+                      }
+
+                      if (!draggedTodoIdRef.current) {
+                        if (
+                          todoTouchStartYRef.current !== null &&
+                          Math.abs(touch.clientY - todoTouchStartYRef.current) > 10 &&
+                          todoTouchHoldTimerRef.current
+                        ) {
+                          window.clearTimeout(todoTouchHoldTimerRef.current);
+                          todoTouchHoldTimerRef.current = null;
+                        }
+                        return;
+                      }
+
+                      event.preventDefault();
+                      const target = document.elementFromPoint(touch.clientX, touch.clientY);
+                      const targetCard = target?.closest<HTMLElement>("[data-todo-id]");
+                      if (targetCard?.dataset.todoId) {
+                        moveDraggedTodoOver(targetCard.dataset.todoId);
+                      }
+                    }}
+                    onTouchStart={(event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest("textarea, input, button")) {
+                        return;
+                      }
+
+                      todoTouchStartYRef.current = event.touches[0]?.clientY ?? null;
+                      todoTouchHoldTimerRef.current = window.setTimeout(() => beginTodoDrag(todo.id), 420);
+                    }}
+                  >
                     <div className="todo-topline">
                       <input
                         type="checkbox"
@@ -1333,6 +1489,7 @@ export function PlannerApp() {
                       />
                     </div>
                     <div className="todo-controls">
+                      <span className="todo-drag-handle" aria-hidden="true">⋮⋮</span>
                       <button
                         className="assign-chip"
                         onClick={() => cycleTodoAssignee(todo)}
@@ -1340,6 +1497,24 @@ export function PlannerApp() {
                       >
                         {getAssigneeLabel(todo.assigned_to)}
                       </button>
+                      <div className="todo-order-controls" aria-label="Reihenfolge aendern">
+                        <button
+                          aria-label="To-do nach oben verschieben"
+                          disabled={todoIndex === 0}
+                          onClick={() => moveTodo(todo.id, -1)}
+                          type="button"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          aria-label="To-do nach unten verschieben"
+                          disabled={todoIndex === visibleOpenTodos.length - 1}
+                          onClick={() => moveTodo(todo.id, 1)}
+                          type="button"
+                        >
+                          ↓
+                        </button>
+                      </div>
                     </div>
                   </article>
                 ))}
@@ -1358,7 +1533,10 @@ export function PlannerApp() {
                     {showOtherTodos ? (
                       <div className="todos-list nested">
                         {otherOpenTodos.map((todo) => (
-                          <article className="todo-item todo-item-secondary" key={todo.id}>
+                          <article
+                            className="todo-item todo-item-secondary"
+                            key={todo.id}
+                          >
                             <div className="todo-topline">
                               <input
                                 type="checkbox"
@@ -1410,7 +1588,7 @@ export function PlannerApp() {
                     {showCompletedTodos ? (
                       <div className="todos-list nested">
                         {completedTodos.map((todo) => (
-                          <article className="todo-item completed" key={todo.id}>
+                          <article className="todo-item todo-item-completed completed" key={todo.id}>
                             <div className="todo-topline">
                               <input
                                 type="checkbox"
