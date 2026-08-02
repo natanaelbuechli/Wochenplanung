@@ -70,26 +70,6 @@ function getDayDateLabel(weekStartDate: string, day: Day) {
   }).format(date);
 }
 
-function getNextAssignee(options: string[], currentValue: string | null) {
-  const values = ["", ...options];
-  const currentIndex = values.findIndex((value) => value === (currentValue ?? ""));
-  const nextIndex = currentIndex === -1 ? 1 : (currentIndex + 1) % values.length;
-  return values[nextIndex] || null;
-}
-
-function getAssigneeLabel(name: string | null) {
-  if (!name) {
-    return "Alle";
-  }
-
-  const cleaned = name.trim();
-  if (!cleaned) {
-    return "Alle";
-  }
-
-  return `${cleaned.slice(0, 3)}.`;
-}
-
 function buildEntryDrafts(entries: Entry[]) {
   return entries.reduce<EntryDrafts>((acc, entry) => {
     acc[getEntryKey(entry.day, entry.time)] = entry.content ?? "";
@@ -194,7 +174,6 @@ export function PlannerApp() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [todoDrafts, setTodoDrafts] = useState<TodoDrafts>({});
   const [todoDraft, setTodoDraft] = useState("");
-  const [showOtherTodos, setShowOtherTodos] = useState(false);
   const [showCompletedTodos, setShowCompletedTodos] = useState(false);
   const [showArchivedWeeks, setShowArchivedWeeks] = useState(false);
   const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
@@ -265,11 +244,6 @@ export function PlannerApp() {
       ? activeWeeks[activeWeekIndex + 1]
       : null;
 
-  const assignableUsers = useMemo(() => {
-    const todoNames = todos.map((todo) => todo.assigned_to).filter(Boolean) as string[];
-    return Array.from(new Set(todoNames)).sort((a, b) => a.localeCompare(b, "de"));
-  }, [todos]);
-
   const visibleOpenTodos = useMemo(() => {
     const openTodos = todos.filter((todo) => !todo.completed);
 
@@ -284,8 +258,6 @@ export function PlannerApp() {
 
     return [...openTodos].sort((a, b) => a.position - b.position);
   }, [dragTodoOrder, todos]);
-
-  const otherOpenTodos = useMemo(() => [] as Todo[], []);
 
   const completedTodos = useMemo(
     () =>
@@ -760,12 +732,6 @@ export function PlannerApp() {
     }, 350);
   }
 
-  async function cycleTodoAssignee(todo: Todo) {
-    await updateTodo(todo.id, {
-      assigned_to: getNextAssignee(assignableUsers, todo.assigned_to ?? null)
-    });
-  }
-
   async function persistTodoOrder(orderedIds: string[]) {
     const positions = new Map(orderedIds.map((todoId, index) => [todoId, (index + 1) * 1000]));
     setTodos((current) =>
@@ -784,19 +750,6 @@ export function PlannerApp() {
       setError(moveError.message);
       bootstrap().catch((bootstrapError: Error) => setError(bootstrapError.message));
     }
-  }
-
-  function moveTodo(todoId: string, direction: -1 | 1) {
-    const orderedIds = visibleOpenTodos.map((todo) => todo.id);
-    const currentIndex = orderedIds.indexOf(todoId);
-    const nextIndex = currentIndex + direction;
-
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedIds.length) {
-      return;
-    }
-
-    [orderedIds[currentIndex], orderedIds[nextIndex]] = [orderedIds[nextIndex], orderedIds[currentIndex]];
-    void persistTodoOrder(orderedIds);
   }
 
   function beginTodoDrag(todoId: string) {
@@ -1411,11 +1364,11 @@ export function PlannerApp() {
           </form>
 
           <div className="todos-list">
-            {visibleOpenTodos.length === 0 && otherOpenTodos.length === 0 && completedTodos.length === 0 ? (
+            {visibleOpenTodos.length === 0 && completedTodos.length === 0 ? (
               <div className="empty-state">Noch keine To-dos vorhanden.</div>
             ) : (
               <>
-                {visibleOpenTodos.map((todo, todoIndex) => (
+                {visibleOpenTodos.map((todo) => (
                   <article
                     className={`todo-item ${draggedTodoId === todo.id ? "todo-item-dragging" : ""}`}
                     data-todo-id={todo.id}
@@ -1487,92 +1440,10 @@ export function PlannerApp() {
                         }}
                         onInput={(event) => autoResizeTodoField(event.currentTarget)}
                       />
-                    </div>
-                    <div className="todo-controls">
                       <span className="todo-drag-handle" aria-hidden="true">⋮⋮</span>
-                      <button
-                        className="assign-chip"
-                        onClick={() => cycleTodoAssignee(todo)}
-                        type="button"
-                      >
-                        {getAssigneeLabel(todo.assigned_to)}
-                      </button>
-                      <div className="todo-order-controls" aria-label="Reihenfolge aendern">
-                        <button
-                          aria-label="To-do nach oben verschieben"
-                          disabled={todoIndex === 0}
-                          onClick={() => moveTodo(todo.id, -1)}
-                          type="button"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          aria-label="To-do nach unten verschieben"
-                          disabled={todoIndex === visibleOpenTodos.length - 1}
-                          onClick={() => moveTodo(todo.id, 1)}
-                          type="button"
-                        >
-                          ↓
-                        </button>
-                      </div>
                     </div>
                   </article>
                 ))}
-
-                {otherOpenTodos.length > 0 ? (
-                  <div className="todo-toggle-block">
-                    <button
-                      className="text-toggle"
-                      onClick={() => setShowOtherTodos((current) => !current)}
-                      type="button"
-                    >
-                      {showOtherTodos
-                        ? `To-dos der Stellenpartnerin ausblenden (${otherOpenTodos.length})`
-                        : `To-dos der Stellenpartnerin anzeigen (${otherOpenTodos.length})`}
-                    </button>
-                    {showOtherTodos ? (
-                      <div className="todos-list nested">
-                        {otherOpenTodos.map((todo) => (
-                          <article
-                            className="todo-item todo-item-secondary"
-                            key={todo.id}
-                          >
-                            <div className="todo-topline">
-                              <input
-                                type="checkbox"
-                                checked={todo.completed}
-                                onChange={(event) =>
-                                  updateTodo(todo.id, {
-                                    completed: event.target.checked
-                                  })
-                                }
-                              />
-                              <textarea
-                                className="todo-text"
-                                rows={1}
-                                value={todoDrafts[todo.id] ?? todo.text}
-                                onChange={(event) => {
-                                  autoResizeTodoField(event.currentTarget);
-                                  handleTodoTextChange(todo.id, event.target.value);
-                                }}
-                                onInput={(event) => autoResizeTodoField(event.currentTarget)}
-                              />
-                            </div>
-                            <div className="todo-controls">
-                              <button
-                                className="assign-chip"
-                                onClick={() => cycleTodoAssignee(todo)}
-                                type="button"
-                              >
-                                {getAssigneeLabel(todo.assigned_to)}
-                              </button>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
 
                 {completedTodos.length > 0 ? (
                   <div className="todo-toggle-block">
@@ -1609,16 +1480,6 @@ export function PlannerApp() {
                                 }}
                                 onInput={(event) => autoResizeTodoField(event.currentTarget)}
                               />
-                            </div>
-                            <div className="todo-controls">
-                              <button
-                                className="assign-chip"
-                                onClick={() => cycleTodoAssignee(todo)}
-                                type="button"
-                              >
-                                {getAssigneeLabel(todo.assigned_to)}
-                              </button>
-                              <div className="todo-meta">Erledigt</div>
                             </div>
                           </article>
                         ))}
