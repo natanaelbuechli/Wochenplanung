@@ -243,6 +243,10 @@ export function PlannerApp() {
     activeWeekIndex >= 0 && activeWeekIndex < activeWeeks.length - 1
       ? activeWeeks[activeWeekIndex + 1]
       : null;
+  const todayWeek = useMemo(
+    () => getDefaultWeek(activeWeeks, currentWeekStart),
+    [activeWeeks, currentWeekStart]
+  );
 
   const visibleOpenTodos = useMemo(() => {
     const openTodos = todos.filter((todo) => !todo.completed);
@@ -1317,6 +1321,14 @@ export function PlannerApp() {
                   type="button"
                 >
                   ←
+                </button>
+                <button
+                  className="week-today-button"
+                  disabled={!todayWeek || todayWeek.id === selectedWeekId}
+                  onClick={() => todayWeek && setSelectedWeekId(todayWeek.id)}
+                  type="button"
+                >
+                  Heute
                 </button>
                 <button
                   className="week-nav-button"

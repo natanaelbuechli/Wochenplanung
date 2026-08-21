@@ -216,6 +216,23 @@ button {
   cursor: default;
 }
 
+.week-today-button {
+  border: 1px solid rgba(112, 129, 120, 0.18);
+  background: rgba(110, 169, 155, 0.1);
+  color: #4f8075;
+  border-radius: 999px;
+  height: 34px;
+  padding: 0 11px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.week-today-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .weeks-list,
 .todos-list {
   display: grid;
