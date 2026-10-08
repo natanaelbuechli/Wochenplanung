@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, TouchEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, TouchEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
@@ -20,6 +20,14 @@ type ActiveAppointmentEditor = {
   day: Day;
   appointmentId: string | null;
 } | null;
+type PlannerSearchResult = {
+  id: string;
+  weekId: string;
+  type: "Unterricht" | "Termin";
+  day: Day;
+  content: string;
+  detail: string | null;
+};
 
 const EMPTY_APPOINTMENT_DRAFT: AppointmentDraft = {
   title: "",
@@ -186,6 +194,10 @@ export function PlannerApp() {
   const [activeAppointmentEditor, setActiveAppointmentEditor] = useState<ActiveAppointmentEditor>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragAnimating, setIsDragAnimating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<PlannerSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const saveTimers = useRef<Record<string, number>>({});
   const todoSaveTimers = useRef<Record<string, number>>({});
   const draggedTodoIdRef = useRef<string | null>(null);
@@ -270,6 +282,79 @@ export function PlannerApp() {
       ),
     [todos]
   );
+
+  useEffect(() => {
+    if (deferredSearchQuery.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    let isCurrentSearch = true;
+    const searchTimer = window.setTimeout(async () => {
+      setIsSearching(true);
+      const [entriesResult, appointmentsResult] = await Promise.all([
+        supabase.from("entries").select("id, week_id, day, time, content"),
+        supabase.from("appointments").select("id, week_id, day, title, time_label")
+      ]);
+
+      if (!isCurrentSearch) {
+        return;
+      }
+
+      const searchError = entriesResult.error ?? appointmentsResult.error;
+      if (searchError) {
+        setError(searchError.message);
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      const needle = deferredSearchQuery.toLocaleLowerCase("de-CH");
+      const matchingEntries: PlannerSearchResult[] = (entriesResult.data ?? [])
+        .filter((entry) => entry.content.toLocaleLowerCase("de-CH").includes(needle))
+        .map((entry) => ({
+          id: `entry-${entry.id}`,
+          weekId: entry.week_id,
+          type: "Unterricht",
+          day: entry.day as Day,
+          content: entry.content,
+          detail: entry.time
+        }));
+      const matchingAppointments: PlannerSearchResult[] = (appointmentsResult.data ?? [])
+        .filter((appointment) =>
+          `${appointment.title} ${appointment.time_label ?? ""}`.toLocaleLowerCase("de-CH").includes(needle)
+        )
+        .map((appointment) => ({
+          id: `appointment-${appointment.id}`,
+          weekId: appointment.week_id,
+          type: "Termin",
+          day: appointment.day as Day,
+          content: appointment.title,
+          detail: appointment.time_label
+        }));
+      const weekById = new Map(weeks.map((week) => [week.id, week]));
+      const dayOrder = new Map(DAYS.map((day, index) => [day, index]));
+
+      setSearchResults(
+        [...matchingEntries, ...matchingAppointments]
+          .filter((result) => weekById.has(result.weekId))
+          .sort((a, b) => {
+            const weekA = weekById.get(a.weekId);
+            const weekB = weekById.get(b.weekId);
+            const weekComparison = (weekB?.start_date ?? "").localeCompare(weekA?.start_date ?? "");
+            return weekComparison || (dayOrder.get(a.day) ?? 0) - (dayOrder.get(b.day) ?? 0);
+          })
+          .slice(0, 40)
+      );
+      setIsSearching(false);
+    }, 280);
+
+    return () => {
+      isCurrentSearch = false;
+      window.clearTimeout(searchTimer);
+    };
+  }, [deferredSearchQuery, weeks]);
 
   async function archivePastWeeks() {
     const { error: archiveError } = await supabase
@@ -1072,6 +1157,15 @@ export function PlannerApp() {
     }
   }
 
+  function openSearchResult(result: PlannerSearchResult) {
+    setSelectedWeekId(result.weekId);
+    setSearchQuery("");
+    setSearchResults([]);
+    window.requestAnimationFrame(() => {
+      document.querySelector(".planning-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   function handlePlannerTouchStart(event: TouchEvent<HTMLElement>) {
     const touch = event.changedTouches[0];
     swipeStartXRef.current = touch?.clientX ?? null;
@@ -1222,6 +1316,52 @@ export function PlannerApp() {
       </header>
 
       {error ? <div className="error-box">{error}</div> : null}
+
+      <section className="planner-search" aria-label="Planung durchsuchen">
+        <div className="planner-search-field">
+          <span aria-hidden="true">⌕</span>
+          <input
+            aria-label="Unterricht und Termine durchsuchen"
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Unterricht oder Termine suchen..."
+            type="search"
+            value={searchQuery}
+          />
+        </div>
+        {deferredSearchQuery.length >= 2 ? (
+          <div className="planner-search-results">
+            {isSearching ? <div className="planner-search-status">Suche...</div> : null}
+            {!isSearching && searchResults.length === 0 ? (
+              <div className="planner-search-status">Keine Treffer gefunden.</div>
+            ) : null}
+            {!isSearching
+              ? searchResults.map((result) => {
+                  const resultWeek = weeks.find((week) => week.id === result.weekId);
+                  return (
+                    <button
+                      className="planner-search-result"
+                      key={result.id}
+                      onClick={() => openSearchResult(result)}
+                      type="button"
+                    >
+                      <span className={`search-result-type ${result.type === "Termin" ? "appointment" : ""}`}>
+                        {result.type}
+                      </span>
+                      <span className="search-result-copy">
+                        <strong>{result.content}</strong>
+                        <small>
+                          {resultWeek
+                            ? `KW ${resultWeek.kw} · ${getShortDayLabel(result.day)} ${getDayDateLabel(resultWeek.start_date, result.day)}${result.detail ? ` · ${result.detail}` : ""}${resultWeek.archived ? " · Archiv" : ""}`
+                            : result.day}
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })
+              : null}
+          </div>
+        ) : null}
+      </section>
 
       <section className="planner-layout">
         <aside className="panel">
